@@ -1,0 +1,74 @@
+.timer-page h1 {
+  margin-bottom: 2rem;
+  color: #333;
+}
+
+.timer-card {
+  max-width: 600px;
+  margin: 0 auto 2rem;
+  text-align: center;
+}
+
+.timer-display {
+  font-size: 5rem;
+  font-weight: bold;
+  color: #4CAF50;
+  margin: 2rem 0;
+  font-variant-numeric: tabular-nums;
+  font-family: 'Courier New', monospace;
+}
+
+.timer-status {
+  margin-bottom: 2rem;
+  font-size: 1.1rem;
+}
+
+.status-running {
+  color: #4CAF50;
+  font-weight: 600;
+}
+
+.status-paused {
+  color: #FF9800;
+  font-weight: 600;
+}
+
+.status-ready {
+  color: #666;
+}
+
+.timer-controls {
+  display: flex;
+  gap: 1rem;
+  margin-top: 2rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.timer-controls .btn-large {
+  min-width: 150px;
+}
+
+.timer-tips {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.timer-tips h3 {
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.timer-tips ul {
+  list-style: none;
+  padding: 0;
+}
+
+.timer-tips li {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #eee;
+}
+
+.timer-tips li:last-child {
+  border-bottom: none;
+}

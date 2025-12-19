@@ -1,0 +1,111 @@
+import { useState, FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { authService } from '../api/services';
+import { APIError } from '../api/client';
+import './Auth.css';
+
+export default function Register() {
+  const [userid, setUserid] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const user = await authService.register({ userid, password });
+      login(user);
+      navigate('/');
+    } catch (err) {
+      if (err instanceof APIError) {
+        setError(err.message);
+      } else {
+        setError('An unexpected error occurred');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="auth-container">
+      <div className="auth-card card">
+        <h1>Create Account</h1>
+        <p className="auth-subtitle">Start tracking your focus time today</p>
+
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label htmlFor="userid">User ID</label>
+            <input
+              id="userid"
+              type="text"
+              className="input"
+              value={userid}
+              onChange={(e) => setUserid(e.target.value)}
+              placeholder="Choose a unique user ID"
+              required
+              disabled={loading}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              className="input"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="At least 6 characters"
+              required
+              disabled={loading}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="confirmPassword">Confirm Password</label>
+            <input
+              id="confirmPassword"
+              type="password"
+              className="input"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter your password"
+              required
+              disabled={loading}
+            />
+          </div>
+
+          {error && <div className="error">{error}</div>}
+
+          <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
+            {loading ? 'Creating account...' : 'Register'}
+          </button>
+        </form>
+
+        <p className="auth-footer">
+          Already have an account? <Link to="/login">Login here</Link>
+        </p>
+      </div>
+    </div>
+  );
+}

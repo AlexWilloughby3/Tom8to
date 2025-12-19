@@ -1,0 +1,119 @@
+.stats-page h1 {
+  margin-bottom: 2rem;
+  color: #333;
+}
+
+.stats-summary {
+  display: grid;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.summary-section h2 {
+  margin-bottom: 1rem;
+  color: #555;
+  font-size: 1.2rem;
+}
+
+.category-stats {
+  display: grid;
+  gap: 1rem;
+}
+
+.category-stat-item {
+  padding: 1rem;
+  background: #f9f9f9;
+  border-radius: 8px;
+}
+
+.category-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.category-name {
+  font-weight: 600;
+  color: #333;
+  font-size: 1.1rem;
+}
+
+.category-time {
+  font-size: 1.3rem;
+  color: #4CAF50;
+  font-weight: 600;
+}
+
+.category-details {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.sessions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.category-filter {
+  padding: 0.5rem 1rem;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.sessions-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.session-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: #f9f9f9;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.session-row:hover {
+  background: #f0f0f0;
+}
+
+.session-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.session-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.btn-delete {
+  background: #f44336;
+  color: white;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.btn-delete:hover {
+  background: #da190b;
+}
