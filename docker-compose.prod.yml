@@ -13,13 +13,20 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql
-    ports:
-      - "5432:5432"
+    # Only expose to internal network, not publicly
+    expose:
+      - "5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
+      interval: 30s
       timeout: 5s
-      retries: 5
+      retries: 3
+    # Optimize for low memory (1 GiB)
+    shm_size: 64mb
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   # FastAPI Application
   api:
@@ -32,13 +39,15 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-app_db}
     ports:
       - "8000:8000"
-    volumes:
-      # Mount code for hot reload during development (remove in production)
-      - ./backend/app:/app/app
     depends_on:
       db:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload  # Remove --reload in production
+    # Production command: no reload, optimized workers
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+    deploy:
+      resources:
+        limits:
+          memory: 384M
 
 volumes:
   postgres_data:

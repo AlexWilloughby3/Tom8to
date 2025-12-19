@@ -23,7 +23,7 @@ app.add_middleware(
         "http://localhost:3000",  # Local development
         "http://localhost:5173",  # Vite default
         "http://localhost:8080",  # Vue default
-        "https://yourusername.github.io",  # Replace with your GitHub Pages URL
+        "https://alexwilloughby3.github.io",  # Replace with your GitHub Pages URL
     ],
     allow_credentials=True,
     allow_methods=["*"],
