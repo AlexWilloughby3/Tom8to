@@ -1,13 +1,9 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   db:
     image: postgres:16-alpine
     container_name: postgres_db
     restart: unless-stopped
-    env_file:
-      - ./secrets/.env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -30,8 +26,6 @@ services:
       dockerfile: Dockerfile
     container_name: fastapi_app
     restart: unless-stopped
-    env_file:
-      - ./secrets/.env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-app_db}
     ports:

@@ -11,7 +11,16 @@
       "Bash(ssh:*)",
       "Bash(npm install:*)",
       "Bash(chmod:*)",
-      "Bash(./deploy-to-ec2.sh)"
+      "Bash(./deploy-to-ec2.sh)",
+      "Bash(git rm:*)",
+      "Bash(if [ -f .env ])",
+      "Bash(then cp .env ../AppForDadSecrets/.env)",
+      "Bash(fi)",
+      "Bash(if [ -f carl2.pem ])",
+      "Bash(then mv carl2.pem ../AppForDadSecrets/)",
+      "Bash(if [ -f carl3private.pem ])",
+      "Bash(then mv carl3private.pem ../AppForDadSecrets/)",
+      "Bash(ln:*)"
     ]
   }
 }

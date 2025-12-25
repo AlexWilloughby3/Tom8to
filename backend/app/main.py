@@ -20,10 +20,18 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",  # Local development
-        "http://localhost:5173",  # Vite default
-        "http://localhost:8080",  # Vue default
-        "https://alexwilloughby3.github.io",  # Replace with your GitHub Pages URL
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:8080",
+        "https://alexwilloughby3.github.io",
+        # Production domain(s)
+        "http://alex-ware.com",
+        "https://alex-ware.com",
+        "http://www.alex-ware.com",
+        "https://www.alex-ware.com",
+        # Subdomain for this deployment
+        "http://tomato.alex-ware.com",
+        "https://tomato.alex-ware.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
