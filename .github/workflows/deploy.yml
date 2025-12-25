@@ -32,7 +32,7 @@ jobs:
           cd frontend
           npm run build
         env:
-          VITE_API_URL: ${{ secrets.API_URL }}
+          VITE_API_URL: http://107.21.171.155:8000
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
