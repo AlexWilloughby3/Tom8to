@@ -20,7 +20,7 @@ EC2_HOST="107.21.171.155"
 EC2_KEY="../AppForDadSecrets/Carl.pem"
 SECRETS_DIR="../AppForDadSecrets"
 DEPLOY_DIR="/home/ec2-user/focus-tracker"
-GIT_REPO="https://github.com/YOUR_USERNAME/YOUR_REPO.git"  # UPDATE THIS!
+GIT_REPO="https://github.com/AlexWilloughby3/Tom8to.git"  # UPDATE THIS!
 
 # Colors
 GREEN='\033[0;32m'
