@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Deploy Focus Tracker to EC2
-# This script uploads the frontend build and restarts Docker containers
+# Deploy Focus Tracker to EC2 using Git
+# This script pulls the latest code from GitHub and rebuilds containers
 
 set -e
 
@@ -21,44 +21,29 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-echo -e "${YELLOW}Step 1: Building frontend...${NC}"
+echo -e "${YELLOW}Deploying to EC2 via Git pull...${NC}"
+ssh -i "$EC2_KEY" "$EC2_USER@$EC2_HOST" << 'ENDSSH'
+set -e
+
+cd /home/ec2-user/focus-tracker
+
+echo "Pulling latest code from GitHub..."
+git pull
+
+echo "Building frontend..."
 cd frontend
+npm install
 npm run build
 cd ..
 
-echo ""
-echo -e "${YELLOW}Step 2: Creating deployment directory on EC2...${NC}"
-ssh -i "$EC2_KEY" "$EC2_USER@$EC2_HOST" "mkdir -p $DEPLOY_DIR/frontend"
-
-echo ""
-echo -e "${YELLOW}Step 3: Uploading files to EC2...${NC}"
-
-# Upload docker-compose.yml
-scp -i "$EC2_KEY" docker-compose.yml "$EC2_USER@$EC2_HOST:$DEPLOY_DIR/"
-
-# Upload nginx config
-scp -i "$EC2_KEY" nginx.conf "$EC2_USER@$EC2_HOST:$DEPLOY_DIR/"
-
-# Upload .env if it exists
-if [ -f .env ]; then
-    scp -i "$EC2_KEY" .env "$EC2_USER@$EC2_HOST:$DEPLOY_DIR/"
-fi
-
-# Upload backend code
-echo "Uploading backend..."
-scp -i "$EC2_KEY" -r backend "$EC2_USER@$EC2_HOST:$DEPLOY_DIR/"
-
-# Upload frontend build
-echo "Uploading frontend build..."
-scp -i "$EC2_KEY" -r frontend/dist "$EC2_USER@$EC2_HOST:$DEPLOY_DIR/frontend/"
-
-echo ""
-echo -e "${YELLOW}Step 4: Restarting Docker containers on EC2...${NC}"
-ssh -i "$EC2_KEY" "$EC2_USER@$EC2_HOST" << 'ENDSSH'
-cd /home/ec2-user/focus-tracker
-docker-compose down
+echo "Restarting Docker containers (rebuilding only changed services)..."
 docker-compose up -d --build
+
+echo "Checking container status..."
 docker-compose ps
+
+echo ""
+echo "Deployment complete!"
 ENDSSH
 
 echo ""
@@ -67,8 +52,12 @@ echo -e "${GREEN}Deployment complete!${NC}"
 echo -e "${GREEN}=========================================${NC}"
 echo ""
 echo "Your app is now available at:"
-echo "  Frontend: http://ec2-107-21-171-155.compute-1.amazonaws.com"
-echo "  Backend:  http://ec2-107-21-171-155.compute-1.amazonaws.com:8000"
+echo "  Frontend: https://tomato.alex-ware.com"
+echo "  Backend:  https://tomato.alex-ware.com/api"
 echo ""
 echo "Check status:"
 echo "  ssh -i $EC2_KEY $EC2_USER@$EC2_HOST 'cd focus-tracker && docker compose ps'"
+echo ""
+echo "View logs:"
+echo "  ssh -i $EC2_KEY $EC2_USER@$EC2_HOST 'cd focus-tracker && docker compose logs -f [service_name]'"
+echo "  (service names: db, api, frontend)"

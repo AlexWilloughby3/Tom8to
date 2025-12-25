@@ -6,6 +6,8 @@ services:
     image: postgres:16-alpine
     container_name: postgres_db
     restart: unless-stopped
+    env_file:
+      - ./secrets/.env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -28,6 +30,8 @@ services:
       dockerfile: Dockerfile
     container_name: fastapi_app
     restart: unless-stopped
+    env_file:
+      - ./secrets/.env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-app_db}
     ports:
@@ -47,9 +51,13 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./frontend/dist:/usr/share/nginx/html
       - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      # Mount Cloudflare origin certificate and private key from secrets directory
+      - ./secrets/carl2.pem:/etc/ssl/certs/fullchain.pem:ro
+      - ./secrets/carl3private.pem:/etc/ssl/private/privkey.pem:ro
     depends_on:
       - api
 

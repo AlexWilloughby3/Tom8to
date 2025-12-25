@@ -27,6 +27,12 @@ wheels/
 .env
 .env.local
 
+# SSL/TLS Certificates and Keys
+*.pem
+
+# Secrets directory (contains .env and SSL certs)
+secrets/
+
 # IDEs
 .vscode/
 .idea/
