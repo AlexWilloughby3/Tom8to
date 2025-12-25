@@ -5,7 +5,13 @@
       "Bash(npm run build:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(curl:*)",
+      "Bash(nc:*)",
+      "Bash(ssh:*)",
+      "Bash(npm install:*)",
+      "Bash(chmod:*)",
+      "Bash(./deploy-to-ec2.sh)"
     ]
   }
 }
