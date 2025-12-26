@@ -37,7 +37,7 @@ export default function Login() {
   return (
     <div className="auth-container">
       <div className="auth-card card">
-        <h1>Login to Focus Tracker</h1>
+        <h1>Login to Tomato</h1>
         <p className="auth-subtitle">Track your focus time and reach your goals</p>
 
         <form onSubmit={handleSubmit}>

@@ -28,6 +28,7 @@ class UserWithSessions(User):
     """User with their focus sessions and goals"""
     focus_sessions: List["FocusSession"] = []
     focus_goals: List["FocusGoal"] = []
+    categories: List["Category"] = []
 
 
 # Focus session schemas
@@ -90,3 +91,31 @@ class UserStats(BaseModel):
     total_focus_time_seconds: int
     total_sessions: int
     categories: List[CategoryStats]
+
+
+# Category schemas
+class CategoryBase(BaseModel):
+    category: str = Field(..., min_length=1, max_length=255, description="Category name")
+
+
+class CategoryCreate(CategoryBase):
+    pass
+
+
+class Category(CategoryBase):
+    userid: str
+
+    class Config:
+        from_attributes = True
+
+
+# Graph data schemas
+class GraphDataPoint(BaseModel):
+    date: str
+    focus_time_seconds: int
+
+
+class GraphData(BaseModel):
+    data_points: List[GraphDataPoint]
+    time_range: str
+    category: Optional[str] = None

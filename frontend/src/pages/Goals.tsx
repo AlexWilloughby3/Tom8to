@@ -1,21 +1,28 @@
 import { useEffect, useState, FormEvent } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { focusGoalService } from '../api/services';
-import type { FocusGoal } from '../types';
+import { usePomodoro } from '../contexts/PomodoroContext';
+import { focusGoalService, categoryService } from '../api/services';
+import type { FocusGoal, Category } from '../types';
 import { hoursToSeconds, secondsToHours } from '../utils/formatters';
 import './Goals.css';
 
 export default function Goals() {
   const { user } = useAuth();
+  const { reloadCategories: reloadPomodoroCategories } = usePomodoro();
   const [goals, setGoals] = useState<FocusGoal[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [category, setCategory] = useState('');
   const [hoursPerWeek, setHoursPerWeek] = useState('');
+  const [newCategory, setNewCategory] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [categoryMessage, setCategoryMessage] = useState('');
+  const [categoryError, setCategoryError] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadGoals();
+    loadCategories();
   }, []);
 
   const loadGoals = async () => {
@@ -28,6 +35,17 @@ export default function Goals() {
       console.error('Failed to load goals:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCategories = async () => {
+    if (!user) return;
+
+    try {
+      const data = await categoryService.getCategories(user.userid);
+      setCategories(data);
+    } catch (error) {
+      console.error('Failed to load categories:', error);
     }
   };
 
@@ -60,7 +78,7 @@ export default function Goals() {
     }
   };
 
-  const handleDelete = async (goal: FocusGoal) => {
+  const handleDeleteGoal = async (goal: FocusGoal) => {
     if (!user) return;
     if (!confirm(`Delete goal for ${goal.category}?`)) return;
 
@@ -74,6 +92,48 @@ export default function Goals() {
     }
   };
 
+  const handleCategorySubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setCategoryMessage('');
+    setCategoryError('');
+
+    if (!user) return;
+
+    if (!newCategory.trim()) {
+      setCategoryError('Please enter a category name');
+      return;
+    }
+
+    try {
+      await categoryService.createCategory(user.userid, {
+        category: newCategory.trim(),
+      });
+
+      setCategoryMessage(`Category "${newCategory}" created`);
+      setNewCategory('');
+      loadCategories();
+      reloadPomodoroCategories();
+    } catch (err) {
+      setCategoryError('Failed to create category. It may already exist.');
+      console.error(err);
+    }
+  };
+
+  const handleDeleteCategory = async (cat: Category) => {
+    if (!user) return;
+    if (!confirm(`Delete category "${cat.category}"?`)) return;
+
+    try {
+      await categoryService.deleteCategory(user.userid, cat.category);
+      setCategories((prev) => prev.filter((c) => c.category !== cat.category));
+      setCategoryMessage(`Category "${cat.category}" deleted`);
+      reloadPomodoroCategories();
+    } catch (error) {
+      setCategoryError('Failed to delete category');
+      console.error(error);
+    }
+  };
+
   if (loading) {
     return <div className="loading">Loading goals...</div>;
   }
@@ -82,21 +142,79 @@ export default function Goals() {
     <div className="goals-page">
       <h1>Focus Goals</h1>
 
+      {/* Category Management */}
       <div className="goals-grid">
+        <div className="card">
+          <h2>New Category</h2>
+          <form onSubmit={handleCategorySubmit}>
+            <div className="form-group">
+              <label htmlFor="newCategory">Category Name</label>
+              <input
+                id="newCategory"
+                type="text"
+                className="input"
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                placeholder="e.g., Programming, Art"
+                required
+              />
+            </div>
+
+            {categoryMessage && <div className="success">{categoryMessage}</div>}
+            {categoryError && <div className="error">{categoryError}</div>}
+
+            <button type="submit" className="btn btn-primary btn-full">
+              Create Category
+            </button>
+          </form>
+        </div>
+
+        <div className="card">
+          <h2>Your Categories</h2>
+          {categories.length === 0 ? (
+            <p className="empty-state">No categories yet. Create your first category!</p>
+          ) : (
+            <div className="goals-list">
+              {categories.map((cat) => (
+                <div key={cat.category} className="goal-item">
+                  <div className="goal-info">
+                    <span className="goal-category">{cat.category}</span>
+                  </div>
+                  <button
+                    className="btn-delete"
+                    onClick={() => handleDeleteCategory(cat)}
+                    title="Delete category"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Goal Management */}
+      <div className="goals-grid" style={{ marginTop: '2rem' }}>
         <div className="card">
           <h2>Set New Goal</h2>
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label htmlFor="category">Category</label>
-              <input
+              <select
                 id="category"
-                type="text"
                 className="input"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                placeholder="e.g., Work, Study, Reading"
                 required
-              />
+              >
+                <option value="">Select a category</option>
+                {categories.map((cat) => (
+                  <option key={cat.category} value={cat.category}>
+                    {cat.category}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="form-group">
@@ -139,7 +257,7 @@ export default function Goals() {
                   </div>
                   <button
                     className="btn-delete"
-                    onClick={() => handleDelete(goal)}
+                    onClick={() => handleDeleteGoal(goal)}
                     title="Delete goal"
                   >
                     ×
@@ -151,16 +269,6 @@ export default function Goals() {
         </div>
       </div>
 
-      <div className="card goals-tips">
-        <h3>Tips for Setting Effective Goals</h3>
-        <ul>
-          <li>📌 Start with realistic, achievable targets</li>
-          <li>📈 Gradually increase your goals as you improve</li>
-          <li>🎯 Set goals for your most important categories</li>
-          <li>⚖️ Balance multiple goals to avoid burnout</li>
-          <li>📊 Review your progress weekly to stay on track</li>
-        </ul>
-      </div>
     </div>
   );
 }

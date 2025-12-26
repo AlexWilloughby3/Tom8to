@@ -1,111 +1,214 @@
-import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { focusSessionService } from '../api/services';
+import { usePomodoro } from '../contexts/PomodoroContext';
 import { formatTime } from '../utils/formatters';
 import './Timer.css';
 
 export default function Timer() {
-  const { user } = useAuth();
-  const [isRunning, setIsRunning] = useState(false);
-  const [seconds, setSeconds] = useState(0);
-  const [category, setCategory] = useState('Work');
-  const [customCategory, setCustomCategory] = useState('');
-  const [showCustom, setShowCustom] = useState(false);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-  const intervalRef = useRef<number | null>(null);
+  useAuth();
 
-  const commonCategories = ['Work', 'Study', 'Reading', 'Exercise', 'Meditation', 'Custom'];
-
-  useEffect(() => {
-    if (isRunning) {
-      intervalRef.current = window.setInterval(() => {
-        setSeconds((s) => s + 1);
-      }, 1000);
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [isRunning]);
-
-  const handleStart = () => {
-    setIsRunning(true);
-    setMessage('');
-    setError('');
-  };
-
-  const handlePause = () => {
-    setIsRunning(false);
-  };
-
-  const handleStop = async () => {
-    setIsRunning(false);
-
-    if (seconds === 0) {
-      setError('Timer must run for at least 1 second');
-      return;
-    }
-
-    if (!user) return;
-
-    const selectedCategory = showCustom ? customCategory : category;
-
-    if (!selectedCategory) {
-      setError('Please select or enter a category');
-      return;
-    }
-
-    try {
-      await focusSessionService.createSession(user.userid, {
-        category: selectedCategory,
-        focus_time_seconds: seconds,
-      });
-
-      setMessage(`Focus session saved! ${formatTime(seconds)} in ${selectedCategory}`);
-      setSeconds(0);
-      setError('');
-    } catch (err) {
-      setError('Failed to save focus session. Please try again.');
-      console.error(err);
-    }
-  };
-
-  const handleReset = () => {
-    setIsRunning(false);
-    setSeconds(0);
-    setMessage('');
-    setError('');
-  };
-
-  const handleCategoryChange = (value: string) => {
-    if (value === 'Custom') {
-      setShowCustom(true);
-      setCategory('Work');
-    } else {
-      setShowCustom(false);
-      setCategory(value);
-    }
-  };
+  // Pomodoro and Stopwatch from context
+  const {
+    categories,
+    pomodoroRunning,
+    pomodoroSeconds,
+    workDuration,
+    breakDuration,
+    cycles,
+    currentCycle,
+    isBreak,
+    totalWorkTime,
+    pomodoroCategory,
+    pomodoroCustomCategory,
+    showPomodoroCustom,
+    pomodoroMessage,
+    pomodoroError,
+    stopwatchRunning,
+    stopwatchSeconds,
+    stopwatchCategory,
+    stopwatchCustomCategory,
+    showStopwatchCustom,
+    stopwatchMessage,
+    stopwatchError,
+    setWorkDuration,
+    setBreakDuration,
+    setCycles,
+    setPomodoroCustomCategory,
+    setStopwatchCustomCategory,
+    handlePomodoroStart,
+    handlePomodoroPause,
+    handlePomodoroResume,
+    handlePomodoroReset,
+    handlePomodoroSave,
+    handlePomodoroCategoryChange,
+    handleStopwatchCategoryChange,
+    handleStopwatchStart,
+    handleStopwatchPause,
+    handleStopwatchReset,
+    handleStopwatchSave,
+    getWorkDuration,
+    getCycles,
+  } = usePomodoro();
 
   return (
     <div className="timer-page">
       <h1>Focus Timer</h1>
 
+      <h2>Pomodoro Timer</h2>
       <div className="timer-card card">
-        <div className="timer-display">{formatTime(seconds)}</div>
+        <div className={`timer-display ${isBreak ? 'timer-break' : ''}`}>
+          {pomodoroSeconds > 0 ? formatTime(pomodoroSeconds) : '00:00:00'}
+        </div>
 
         <div className="timer-status">
-          {isRunning ? (
+          {pomodoroRunning ? (
+            isBreak ? (
+              <span className="status-break">☕ Break Time - Cycle {currentCycle}/{getCycles()}</span>
+            ) : (
+              <span className="status-running">● Working - Cycle {currentCycle}/{getCycles()}</span>
+            )
+          ) : pomodoroSeconds > 0 ? (
+            <span className="status-paused">⏸ Paused</span>
+          ) : (
+            <span className="status-ready">Ready to start</span>
+          )}
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="pomodoroCategory">Category</label>
+          <select
+            id="pomodoroCategory"
+            className="input"
+            value={showPomodoroCustom ? 'Custom' : pomodoroCategory}
+            onChange={(e) => handlePomodoroCategoryChange(e.target.value)}
+            disabled={pomodoroRunning || pomodoroSeconds > 0}
+          >
+            {categories.map((cat) => (
+              <option key={cat.category} value={cat.category}>
+                {cat.category}
+              </option>
+            ))}
+            <option value="Custom">Custom</option>
+          </select>
+        </div>
+
+        {showPomodoroCustom && (
+          <div className="form-group">
+            <label htmlFor="pomodoroCustomCategory">Custom Category Name</label>
+            <input
+              id="pomodoroCustomCategory"
+              type="text"
+              className="input"
+              value={pomodoroCustomCategory}
+              onChange={(e) => setPomodoroCustomCategory(e.target.value)}
+              placeholder="Enter category name"
+              disabled={pomodoroRunning || pomodoroSeconds > 0}
+            />
+          </div>
+        )}
+
+        <div className="pomodoro-settings">
+          <div className="form-group">
+            <label htmlFor="workDuration">Work Duration (minutes)</label>
+            <input
+              id="workDuration"
+              type="number"
+              className="input number-input"
+              value={workDuration}
+              onChange={(e) => {
+                const val = e.target.value === '' ? '' : parseInt(e.target.value);
+                if (val === '' || (typeof val === 'number' && val > 0)) {
+                  setWorkDuration(val);
+                }
+              }}
+              placeholder="25"
+              disabled={pomodoroRunning || pomodoroSeconds > 0}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="breakDuration">Break Duration (minutes)</label>
+            <input
+              id="breakDuration"
+              type="number"
+              className="input number-input"
+              value={breakDuration}
+              onChange={(e) => {
+                const val = e.target.value === '' ? '' : parseInt(e.target.value);
+                if (val === '' || (typeof val === 'number' && val > 0)) {
+                  setBreakDuration(val);
+                }
+              }}
+              placeholder="5"
+              disabled={pomodoroRunning || pomodoroSeconds > 0}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="cycles">Number of Cycles</label>
+            <input
+              id="cycles"
+              type="number"
+              className="input number-input"
+              value={cycles}
+              onChange={(e) => {
+                const val = e.target.value === '' ? '' : parseInt(e.target.value);
+                if (val === '' || (typeof val === 'number' && val > 0)) {
+                  setCycles(val);
+                }
+              }}
+              placeholder="4"
+              disabled={pomodoroRunning || pomodoroSeconds > 0}
+            />
+          </div>
+        </div>
+
+        {pomodoroMessage && <div className="success">{pomodoroMessage}</div>}
+        {pomodoroError && <div className="error">{pomodoroError}</div>}
+
+        <div className="timer-controls">
+          {pomodoroSeconds === 0 ? (
+            <button
+              onClick={handlePomodoroStart}
+              className="btn btn-primary btn-large"
+              disabled={stopwatchRunning || stopwatchSeconds > 0}
+            >
+              Start Pomodoro
+            </button>
+          ) : (
+            <>
+              {!pomodoroRunning ? (
+                <button onClick={handlePomodoroResume} className="btn btn-primary btn-large">
+                  Resume
+                </button>
+              ) : (
+                <button onClick={handlePomodoroPause} className="btn btn-danger btn-large">
+                  Pause
+                </button>
+              )}
+              <button onClick={handlePomodoroSave} className="btn btn-secondary btn-large">
+                Save & Quit
+              </button>
+              <button onClick={handlePomodoroReset} className="btn btn-danger">
+                Reset
+              </button>
+            </>
+          )}
+        </div>
+
+        <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f9f9f9', borderRadius: '8px' }}>
+          <strong>Total work time this session: </strong>
+          {formatTime(totalWorkTime + (isBreak || pomodoroSeconds === 0 ? 0 : (getWorkDuration() * 60 - pomodoroSeconds)))}
+        </div>
+      </div>
+
+      <h2 style={{ marginTop: '3rem' }}>Stopwatch</h2>
+      <div className="timer-card card">
+        <div className="timer-display">{formatTime(stopwatchSeconds)}</div>
+
+        <div className="timer-status">
+          {stopwatchRunning ? (
             <span className="status-running">● Recording...</span>
-          ) : seconds > 0 ? (
+          ) : stopwatchSeconds > 0 ? (
             <span className="status-paused">⏸ Paused</span>
           ) : (
             <span className="status-ready">Ready to start</span>
@@ -117,70 +220,69 @@ export default function Timer() {
           <select
             id="category"
             className="input"
-            value={showCustom ? 'Custom' : category}
-            onChange={(e) => handleCategoryChange(e.target.value)}
-            disabled={isRunning}
+            value={showStopwatchCustom ? 'Custom' : stopwatchCategory}
+            onChange={(e) => handleStopwatchCategoryChange(e.target.value)}
+            disabled={stopwatchRunning}
           >
-            {commonCategories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
+            {categories.map((cat) => (
+              <option key={cat.category} value={cat.category}>
+                {cat.category}
               </option>
             ))}
+            <option value="Custom">Custom</option>
           </select>
         </div>
 
-        {showCustom && (
+        {showStopwatchCustom && (
           <div className="form-group">
             <label htmlFor="customCategory">Custom Category Name</label>
             <input
               id="customCategory"
               type="text"
               className="input"
-              value={customCategory}
-              onChange={(e) => setCustomCategory(e.target.value)}
+              value={stopwatchCustomCategory}
+              onChange={(e) => setStopwatchCustomCategory(e.target.value)}
               placeholder="Enter category name"
-              disabled={isRunning}
+              disabled={stopwatchRunning}
             />
           </div>
         )}
 
-        {message && <div className="success">{message}</div>}
-        {error && <div className="error">{error}</div>}
+        {stopwatchMessage && <div className="success">{stopwatchMessage}</div>}
+        {stopwatchError && <div className="error">{stopwatchError}</div>}
+
+        <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f9f9f9', borderRadius: '8px' }}>
+          <strong>Elapsed time: </strong>
+          {formatTime(stopwatchSeconds)}
+        </div>
 
         <div className="timer-controls">
-          {!isRunning ? (
+          {!stopwatchRunning ? (
             <>
-              <button onClick={handleStart} className="btn btn-primary btn-large">
-                {seconds === 0 ? 'Start' : 'Resume'}
+              <button
+                onClick={handleStopwatchStart}
+                className="btn btn-primary btn-large"
+                disabled={pomodoroRunning || pomodoroSeconds > 0}
+              >
+                {stopwatchSeconds === 0 ? 'Start' : 'Resume'}
               </button>
-              {seconds > 0 && (
+              {stopwatchSeconds > 0 && (
                 <>
-                  <button onClick={handleStop} className="btn btn-secondary btn-large">
+                  <button onClick={handleStopwatchSave} className="btn btn-secondary btn-large">
                     Save Session
                   </button>
-                  <button onClick={handleReset} className="btn btn-danger">
+                  <button onClick={handleStopwatchReset} className="btn btn-danger">
                     Reset
                   </button>
                 </>
               )}
             </>
           ) : (
-            <button onClick={handlePause} className="btn btn-danger btn-large">
+            <button onClick={handleStopwatchPause} className="btn btn-danger btn-large">
               Pause
             </button>
           )}
         </div>
-      </div>
-
-      <div className="timer-tips card">
-        <h3>Tips for Effective Focus Sessions</h3>
-        <ul>
-          <li>🎯 Set a clear goal before starting your session</li>
-          <li>🔕 Turn off notifications and distractions</li>
-          <li>⏱️ Use the Pomodoro technique: 25 min focus, 5 min break</li>
-          <li>💪 Take regular breaks to maintain productivity</li>
-          <li>📊 Review your stats to track improvement</li>
-        </ul>
       </div>
     </div>
   );

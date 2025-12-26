@@ -12,10 +12,14 @@
 .timer-display {
   font-size: 5rem;
   font-weight: bold;
-  color: #4CAF50;
+  color: #FF6347;
   margin: 2rem 0;
   font-variant-numeric: tabular-nums;
   font-family: 'Courier New', monospace;
+}
+
+.timer-display.timer-break {
+  color: #2196F3;
 }
 
 .timer-status {
@@ -24,12 +28,17 @@
 }
 
 .status-running {
-  color: #4CAF50;
+  color: #FF6347;
   font-weight: 600;
 }
 
 .status-paused {
   color: #FF9800;
+  font-weight: 600;
+}
+
+.status-break {
+  color: #2196F3;
   font-weight: 600;
 }
 
@@ -71,4 +80,22 @@
 
 .timer-tips li:last-child {
   border-bottom: none;
+}
+
+.pomodoro-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* Hide number input spinners for cleaner typing experience */
+.number-input::-webkit-outer-spin-button,
+.number-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.number-input[type=number] {
+  -moz-appearance: textfield;
 }

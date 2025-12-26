@@ -13,6 +13,7 @@ class UserInformation(Base):
     # Relationships
     focus_sessions = relationship("FocusInformation", back_populates="user", cascade="all, delete-orphan")
     focus_goals = relationship("FocusGoalInformation", back_populates="user", cascade="all, delete-orphan")
+    categories = relationship("CategoryInformation", back_populates="user", cascade="all, delete-orphan")
 
 
 class FocusInformation(Base):
@@ -38,3 +39,14 @@ class FocusGoalInformation(Base):
 
     # Relationship to user
     user = relationship("UserInformation", back_populates="focus_goals")
+
+
+class CategoryInformation(Base):
+    """Table 4: Category information"""
+    __tablename__ = "category_information"
+
+    userid = Column(String(255), ForeignKey("user_information.userid"), primary_key=True, nullable=False)
+    category = Column(String(255), primary_key=True, nullable=False)
+
+    # Relationship to user
+    user = relationship("UserInformation", back_populates="categories")

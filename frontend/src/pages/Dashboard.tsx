@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { focusSessionService, statsService } from '../api/services';
-import type { FocusSession, UserStats } from '../types';
-import { formatDuration, formatDate } from '../utils/formatters';
+import { statsService } from '../api/services';
+import type { UserStats } from '../types';
+import { formatDuration } from '../utils/formatters';
+import FocusTimeGraph from '../components/FocusTimeGraph';
 import './Dashboard.css';
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [recentSessions, setRecentSessions] = useState<FocusSession[]>([]);
   const [weeklyStats, setWeeklyStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -20,12 +20,7 @@ export default function Dashboard() {
     if (!user) return;
 
     try {
-      const [sessions, stats] = await Promise.all([
-        focusSessionService.getSessions(user.userid, { limit: 5 }),
-        statsService.getWeeklyStats(user.userid),
-      ]);
-
-      setRecentSessions(sessions);
+      const stats = await statsService.getWeeklyStats(user.userid);
       setWeeklyStats(stats);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
@@ -70,31 +65,6 @@ export default function Dashboard() {
         <Link to="/timer" className="btn btn-primary btn-large">
           Start Focus Session
         </Link>
-        <Link to="/stats" className="btn btn-secondary btn-large">
-          View Detailed Stats
-        </Link>
-      </div>
-
-      {/* Recent Sessions */}
-      <div className="card">
-        <h2>Recent Sessions</h2>
-        {recentSessions.length === 0 ? (
-          <p className="empty-state">No focus sessions yet. Start your first session!</p>
-        ) : (
-          <div className="sessions-list">
-            {recentSessions.map((session) => (
-              <div key={session.time} className="session-item">
-                <div className="session-info">
-                  <span className="session-category">{session.category}</span>
-                  <span className="session-date">{formatDate(session.time)}</span>
-                </div>
-                <div className="session-duration">
-                  {formatDuration(session.focus_time_seconds)}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Category Progress */}
@@ -126,6 +96,9 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
+
+          {/* Focus Time Graph */}
+          <FocusTimeGraph />
         </div>
       )}
     </div>

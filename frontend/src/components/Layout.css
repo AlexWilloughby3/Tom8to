@@ -23,7 +23,7 @@
 }
 
 .nav-brand h2 {
-  color: #4CAF50;
+  color: #FF6347;
   font-size: 1.5rem;
 }
 
@@ -54,4 +54,51 @@
 .main-content {
   flex: 1;
   padding: 2rem 0;
+}
+
+/* Floating timer display */
+.floating-timer {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 1rem 1.5rem;
+  z-index: 1000;
+  min-width: 150px;
+  border: 2px solid #FF6347;
+}
+
+.floating-timer.break-mode {
+  border-color: #2196F3;
+}
+
+.floating-timer-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.floating-timer-label {
+  font-size: 0.85rem;
+  color: #666;
+  font-weight: 600;
+}
+
+.floating-timer-time {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #FF6347;
+  font-family: 'Courier New', monospace;
+}
+
+.floating-timer.break-mode .floating-timer-time {
+  color: #2196F3;
+}
+
+.floating-timer-cycle {
+  font-size: 0.75rem;
+  color: #999;
 }

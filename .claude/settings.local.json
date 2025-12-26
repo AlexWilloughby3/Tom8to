@@ -20,7 +20,13 @@
       "Bash(then mv carl2.pem ../AppForDadSecrets/)",
       "Bash(if [ -f carl3private.pem ])",
       "Bash(then mv carl3private.pem ../AppForDadSecrets/)",
-      "Bash(ln:*)"
+      "Bash(ln:*)",
+      "Bash(cd:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker-compose restart:*)",
+      "Bash(grep:*)",
+      "Bash(docker-compose ps:*)"
     ]
   }
 }

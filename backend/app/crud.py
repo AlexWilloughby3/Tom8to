@@ -38,6 +38,14 @@ def create_user(db: Session, user: schemas.UserCreate) -> models.UserInformation
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+
+    # Create default categories for new user
+    default_categories = ['Work', 'Study', 'Reading', 'Exercise', 'Meditation']
+    for cat_name in default_categories:
+        cat = models.CategoryInformation(userid=user.userid, category=cat_name)
+        db.add(cat)
+    db.commit()
+
     return db_user
 
 
@@ -72,6 +80,16 @@ def create_focus_session(
     """Create a focus session (defaults to current time)"""
     if time is None:
         time = datetime.utcnow()
+
+    # Auto-create category if it doesn't exist
+    category_obj = get_category(db, userid, focus_session.category)
+    if not category_obj:
+        category_obj = models.CategoryInformation(
+            userid=userid,
+            category=focus_session.category
+        )
+        db.add(category_obj)
+        db.commit()
 
     db_session = models.FocusInformation(
         userid=userid,
@@ -231,4 +249,155 @@ def get_user_stats(
         total_focus_time_seconds=total_time,
         total_sessions=total_sessions,
         categories=categories
+    )
+
+
+# ===== CATEGORY OPERATIONS =====
+
+def create_category(db: Session, userid: str, category: schemas.CategoryCreate) -> models.CategoryInformation:
+    """Create a new category for a user"""
+    db_category = get_category(db, userid, category.category)
+
+    if db_category:
+        # Category already exists, just return it
+        return db_category
+
+    # Create new category
+    db_category = models.CategoryInformation(
+        userid=userid,
+        category=category.category
+    )
+    db.add(db_category)
+    db.commit()
+    db.refresh(db_category)
+    return db_category
+
+
+def get_category(db: Session, userid: str, category: str) -> Optional[models.CategoryInformation]:
+    """Get a specific category"""
+    return db.query(models.CategoryInformation).filter(
+        models.CategoryInformation.userid == userid,
+        models.CategoryInformation.category == category
+    ).first()
+
+
+def get_categories(db: Session, userid: str) -> List[models.CategoryInformation]:
+    """Get all categories for a user"""
+    return db.query(models.CategoryInformation).filter(
+        models.CategoryInformation.userid == userid
+    ).order_by(models.CategoryInformation.category).all()
+
+
+def delete_category(db: Session, userid: str, category: str) -> bool:
+    """Delete a category and cascade delete all associated goals and focus sessions"""
+    db_category = get_category(db, userid, category)
+    if db_category:
+        # Delete all focus goals for this category
+        db.query(models.FocusGoalInformation).filter(
+            models.FocusGoalInformation.userid == userid,
+            models.FocusGoalInformation.category == category
+        ).delete()
+
+        # Delete all focus sessions for this category
+        db.query(models.FocusInformation).filter(
+            models.FocusInformation.userid == userid,
+            models.FocusInformation.category == category
+        ).delete()
+
+        # Delete the category itself
+        db.delete(db_category)
+        db.commit()
+        return True
+    return False
+
+
+# ===== GRAPH DATA OPERATIONS =====
+
+def get_graph_data(db: Session, userid: str, time_range: str, category: Optional[str] = None) -> schemas.GraphData:
+    """Get focus session data for graphing over a time period"""
+    from datetime import datetime, timedelta
+    from sqlalchemy import func
+
+    # Calculate date ranges
+    today = datetime.utcnow().replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    if time_range == 'week':
+        start_date = today - timedelta(days=6)  # Last 7 days
+        group_by_week = False
+    elif time_range == 'month':
+        start_date = today - timedelta(days=29)  # Last 30 days
+        group_by_week = False
+    elif time_range == '6month':
+        start_date = today - timedelta(days=179)  # Last 180 days
+        group_by_week = True
+    elif time_range == 'ytd':
+        start_date = datetime(today.year, 1, 1)  # Start of year
+        group_by_week = True
+    else:
+        raise ValueError(f"Invalid time_range: {time_range}")
+
+    # Query focus sessions
+    query = db.query(models.FocusInformation).filter(
+        models.FocusInformation.userid == userid,
+        models.FocusInformation.time >= start_date,
+        models.FocusInformation.time <= today
+    )
+
+    # Filter by category if specified
+    if category:
+        query = query.filter(models.FocusInformation.category == category)
+
+    sessions = query.all()
+
+    # Group by day or week
+    data_dict = {}
+
+    if group_by_week:
+        # Group by week
+        for session in sessions:
+            # Get Monday of the week
+            week_start = session.time - timedelta(days=session.time.weekday())
+            week_key = week_start.strftime('%Y-%m-%d')
+
+            if week_key not in data_dict:
+                data_dict[week_key] = 0
+            data_dict[week_key] += session.focus_time_seconds
+    else:
+        # Group by day
+        for session in sessions:
+            day_key = session.time.strftime('%Y-%m-%d')
+
+            if day_key not in data_dict:
+                data_dict[day_key] = 0
+            data_dict[day_key] += session.focus_time_seconds
+
+    # Fill in missing dates with 0
+    current = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    filled_data = {}
+
+    if group_by_week:
+        # Fill weeks
+        while current <= today:
+            week_start = current - timedelta(days=current.weekday())
+            week_key = week_start.strftime('%Y-%m-%d')
+            if week_key not in filled_data:
+                filled_data[week_key] = data_dict.get(week_key, 0)
+            current += timedelta(days=7)
+    else:
+        # Fill days
+        while current <= today:
+            day_key = current.strftime('%Y-%m-%d')
+            filled_data[day_key] = data_dict.get(day_key, 0)
+            current += timedelta(days=1)
+
+    # Convert to list of data points
+    data_points = [
+        schemas.GraphDataPoint(date=date, focus_time_seconds=seconds)
+        for date, seconds in sorted(filled_data.items())
+    ]
+
+    return schemas.GraphData(
+        data_points=data_points,
+        time_range=time_range,
+        category=category
     )

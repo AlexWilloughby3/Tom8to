@@ -8,6 +8,10 @@ import type {
   FocusGoal,
   FocusGoalCreate,
   UserStats,
+  Category,
+  CategoryCreate,
+  GraphData,
+  TimeRange,
 } from '../types';
 
 // User/Auth Services
@@ -104,5 +108,31 @@ export const statsService = {
 
   async getWeeklyStats(userid: string): Promise<UserStats> {
     return api.get<UserStats>(`/users/${userid}/stats/weekly`);
+  },
+};
+
+// Category Services
+export const categoryService = {
+  async createCategory(userid: string, data: CategoryCreate): Promise<Category> {
+    return api.post<Category>(`/users/${userid}/categories`, data);
+  },
+
+  async getCategories(userid: string): Promise<Category[]> {
+    return api.get<Category[]>(`/users/${userid}/categories`);
+  },
+
+  async deleteCategory(userid: string, category: string): Promise<void> {
+    return api.delete<void>(`/users/${userid}/categories/${encodeURIComponent(category)}`);
+  },
+};
+
+// Graph Data Services
+export const graphService = {
+  async getGraphData(userid: string, timeRange: TimeRange, category?: string): Promise<GraphData> {
+    const params = new URLSearchParams({ time_range: timeRange });
+    if (category) {
+      params.append('category', category);
+    }
+    return api.get<GraphData>(`/users/${userid}/graph-data?${params.toString()}`);
   },
 };

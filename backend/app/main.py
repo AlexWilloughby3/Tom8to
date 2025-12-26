@@ -271,3 +271,63 @@ def get_weekly_stats(userid: str, db: Session = Depends(get_db)):
         start_date=start_of_week,
         end_date=today
     )
+
+
+# ===== CATEGORY ENDPOINTS =====
+
+@app.post("/api/users/{userid}/categories", response_model=schemas.Category, status_code=201)
+def create_category(
+    userid: str,
+    category: schemas.CategoryCreate,
+    db: Session = Depends(get_db)
+):
+    """Create a new category for a user"""
+    # Verify user exists
+    user = crud.get_user(db, userid=userid)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return crud.create_category(db=db, userid=userid, category=category)
+
+
+@app.get("/api/users/{userid}/categories", response_model=List[schemas.Category])
+def get_categories(userid: str, db: Session = Depends(get_db)):
+    """Get all categories for a user"""
+    # Verify user exists
+    user = crud.get_user(db, userid=userid)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return crud.get_categories(db=db, userid=userid)
+
+
+@app.delete("/api/users/{userid}/categories/{category}", status_code=204)
+def delete_category(userid: str, category: str, db: Session = Depends(get_db)):
+    """Delete a category"""
+    success = crud.delete_category(db, userid=userid, category=category)
+    if not success:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return None
+
+
+# ===== GRAPH DATA ENDPOINTS =====
+
+@app.get("/api/users/{userid}/graph-data", response_model=schemas.GraphData)
+def get_graph_data(
+    userid: str,
+    time_range: str,
+    category: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Get graph data for focus time visualization"""
+    # Verify user exists
+    user = crud.get_user(db, userid=userid)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Validate time_range
+    valid_ranges = ['week', 'month', '6month', 'ytd']
+    if time_range not in valid_ranges:
+        raise HTTPException(status_code=400, detail=f"Invalid time_range. Must be one of: {', '.join(valid_ranges)}")
+
+    return crud.get_graph_data(db=db, userid=userid, time_range=time_range, category=category)

@@ -35,13 +35,26 @@ body {
   font-weight: 500;
 }
 
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn:disabled:hover {
+  transform: none;
+}
+
 .btn-primary {
-  background: #4CAF50;
+  background: #FF6347;
   color: white;
 }
 
 .btn-primary:hover {
-  background: #45a049;
+  background: #E5533D;
+}
+
+.btn-primary:disabled:hover {
+  background: #FF6347;
 }
 
 .btn-secondary {
@@ -53,6 +66,10 @@ body {
   background: #0b7dda;
 }
 
+.btn-secondary:disabled:hover {
+  background: #2196F3;
+}
+
 .btn-danger {
   background: #f44336;
   color: white;
@@ -60,6 +77,10 @@ body {
 
 .btn-danger:hover {
   background: #da190b;
+}
+
+.btn-danger:disabled:hover {
+  background: #f44336;
 }
 
 .card {
@@ -81,7 +102,7 @@ body {
 
 .input:focus {
   outline: none;
-  border-color: #4CAF50;
+  border-color: #FF6347;
 }
 
 .form-group {
@@ -102,7 +123,7 @@ body {
 }
 
 .success {
-  color: #4CAF50;
+  color: #228B22;
   font-size: 14px;
   margin-top: 8px;
 }

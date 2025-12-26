@@ -50,3 +50,25 @@ export interface FocusGoalCreate {
   category: string;
   goal_time_per_week_seconds: number;
 }
+
+export interface Category {
+  userid: string;
+  category: string;
+}
+
+export interface CategoryCreate {
+  category: string;
+}
+
+export interface GraphDataPoint {
+  date: string;
+  focus_time_seconds: number;
+}
+
+export interface GraphData {
+  data_points: GraphDataPoint[];
+  time_range: string;
+  category?: string;
+}
+
+export type TimeRange = 'week' | 'month' | '6month' | 'ytd';
