@@ -1,13 +1,13 @@
 import { useState, FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { authService } from '../api/services';
+import { verificationService } from '../api/services';
 import { APIError } from '../api/client';
 import './Auth.css';
 
-export default function Login() {
+export default function LoginWithCode() {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -20,15 +20,12 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const user = await authService.login({ email, password });
+      const user = await verificationService.loginWithCode(email, code);
       login(user);
       navigate('/');
     } catch (err) {
-      if (err instanceof APIError) {
-        setError(err.message);
-      } else {
-        setError('An unexpected error occurred');
-      }
+      if (err instanceof APIError) setError(err.message);
+      else setError('Failed to login with code');
     } finally {
       setLoading(false);
     }
@@ -37,8 +34,16 @@ export default function Login() {
   return (
     <div className="auth-container">
       <div className="auth-card card">
-        <h1>Login to Tomato</h1>
-        <p className="auth-subtitle">Track your focus time and reach your goals</p>
+        <button
+          onClick={() => navigate('/login')}
+          className="back-arrow"
+          type="button"
+          aria-label="Back to login"
+        >
+          ← Back
+        </button>
+        <h1>Login with Code</h1>
+        <p className="auth-subtitle">Enter the verification code sent to your email</p>
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
@@ -56,14 +61,14 @@ export default function Login() {
           </div>
 
           <div className="form-group">
-            <label htmlFor="password">Password</label>
+            <label htmlFor="code">Verification Code</label>
             <input
-              id="password"
-              type="password"
+              id="code"
+              type="text"
               className="input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="123456"
               required
               disabled={loading}
             />
@@ -75,14 +80,6 @@ export default function Login() {
             {loading ? 'Logging in...' : 'Login'}
           </button>
         </form>
-
-        <p className="auth-footer">
-          Don't have an account? <Link to="/register">Register here</Link>
-        </p>
-
-        <p className="auth-footer">
-          <Link to="/forgot-password">Forgot password?</Link>
-        </p>
       </div>
     </div>
   );

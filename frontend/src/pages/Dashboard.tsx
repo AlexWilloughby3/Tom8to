@@ -20,7 +20,7 @@ export default function Dashboard() {
     if (!user) return;
 
     try {
-      const stats = await statsService.getWeeklyStats(user.userid);
+      const stats = await statsService.getWeeklyStats(user.email);
       setWeeklyStats(stats);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);

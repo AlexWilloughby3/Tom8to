@@ -33,7 +33,7 @@ describe('Integration Tests', () => {
 
   it('should complete full user registration and login flow', async () => {
     const user = userEvent.setup();
-    const mockUser = { userid: 'newuser' };
+    const mockUser = { email: 'newuser@example.com' };
 
     vi.mocked(authService.register).mockResolvedValue(mockUser);
 
@@ -60,7 +60,7 @@ describe('Integration Tests', () => {
 
   it('should handle authentication flow', async () => {
     const user = userEvent.setup();
-    const mockUser = { userid: 'testuser' };
+    const mockUser = { email: 'testuser@example.com' };
 
     vi.mocked(authService.login).mockResolvedValue(mockUser);
     vi.mocked(focusSessionService.getSessions).mockResolvedValue([]);
@@ -73,17 +73,17 @@ describe('Integration Tests', () => {
 
     // Fill in login form
     await waitFor(() => {
-      expect(screen.getByLabelText(/user id/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
     });
 
-    await user.type(screen.getByLabelText(/user id/i), 'testuser');
+    await user.type(screen.getByLabelText(/email/i), 'testuser@example.com');
     await user.type(screen.getByLabelText(/password/i), 'password123');
     await user.click(screen.getByRole('button', { name: /^login$/i }));
 
     // Should navigate to dashboard after successful login
     await waitFor(() => {
       // The exact text depends on your Dashboard component
-      expect(mockUser.userid).toBe('testuser');
+      expect(mockUser.email).toBe('testuser');
     });
   });
 
@@ -104,7 +104,7 @@ describe('Integration Tests', () => {
     // const user = userEvent.setup();
 
     // Set up authenticated user
-    localStorage.setItem('user', JSON.stringify({ userid: 'testuser' }));
+    localStorage.setItem('user', JSON.stringify({ email: 'testuser@example.com' }));
     vi.mocked(focusSessionService.getSessions).mockResolvedValue([]);
 
     render(

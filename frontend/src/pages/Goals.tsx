@@ -29,7 +29,7 @@ export default function Goals() {
     if (!user) return;
 
     try {
-      const data = await focusGoalService.getGoals(user.userid);
+      const data = await focusGoalService.getGoals(user.email);
       setGoals(data);
     } catch (error) {
       console.error('Failed to load goals:', error);
@@ -42,7 +42,7 @@ export default function Goals() {
     if (!user) return;
 
     try {
-      const data = await categoryService.getCategories(user.userid);
+      const data = await categoryService.getCategories(user.email);
       setCategories(data);
     } catch (error) {
       console.error('Failed to load categories:', error);
@@ -63,7 +63,7 @@ export default function Goals() {
     }
 
     try {
-      await focusGoalService.createGoal(user.userid, {
+      await focusGoalService.createGoal(user.email, {
         category,
         goal_time_per_week_seconds: hoursToSeconds(hours),
       });
@@ -83,7 +83,7 @@ export default function Goals() {
     if (!confirm(`Delete goal for ${goal.category}?`)) return;
 
     try {
-      await focusGoalService.deleteGoal(user.userid, goal.category);
+      await focusGoalService.deleteGoal(user.email, goal.category);
       setGoals((prev) => prev.filter((g) => g.category !== goal.category));
       setMessage(`Goal for ${goal.category} deleted`);
     } catch (error) {
@@ -105,7 +105,7 @@ export default function Goals() {
     }
 
     try {
-      await categoryService.createCategory(user.userid, {
+      await categoryService.createCategory(user.email, {
         category: newCategory.trim(),
       });
 
@@ -124,7 +124,7 @@ export default function Goals() {
     if (!confirm(`Delete category "${cat.category}"?`)) return;
 
     try {
-      await categoryService.deleteCategory(user.userid, cat.category);
+      await categoryService.deleteCategory(user.email, cat.category);
       setCategories((prev) => prev.filter((c) => c.category !== cat.category));
       setCategoryMessage(`Category "${cat.category}" deleted`);
       reloadPomodoroCategories();

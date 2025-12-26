@@ -1,19 +1,19 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
 from datetime import datetime
 
 
 # User schemas
 class UserBase(BaseModel):
-    userid: str = Field(..., min_length=1, max_length=255, description="Unique user identifier")
+    email: EmailStr = Field(..., description="User email address")
 
 
 class UserCreate(UserBase):
-    password: str = Field(..., min_length=6, description="User password (will be hashed)")
+    password: str = Field(..., min_length=8, description="User password (will be hashed, min 8 characters)")
 
 
 class UserLogin(BaseModel):
-    userid: str
+    email: EmailStr
     password: str
 
 
@@ -48,7 +48,7 @@ class FocusSessionCreateWithTime(FocusSessionBase):
 
 
 class FocusSession(FocusSessionBase):
-    userid: str
+    email: str
     time: datetime
 
     class Config:
@@ -70,7 +70,7 @@ class FocusGoalUpdate(BaseModel):
 
 
 class FocusGoal(FocusGoalBase):
-    userid: str
+    email: str
 
     class Config:
         from_attributes = True
@@ -87,7 +87,7 @@ class CategoryStats(BaseModel):
 
 
 class UserStats(BaseModel):
-    userid: str
+    email: str
     total_focus_time_seconds: int
     total_sessions: int
     categories: List[CategoryStats]
@@ -103,7 +103,7 @@ class CategoryCreate(CategoryBase):
 
 
 class Category(CategoryBase):
-    userid: str
+    email: str
 
     class Config:
         from_attributes = True
@@ -119,3 +119,32 @@ class GraphData(BaseModel):
     data_points: List[GraphDataPoint]
     time_range: str
     category: Optional[str] = None
+
+
+# Verification code and password schemas
+class VerificationCodeRequest(BaseModel):
+    email: EmailStr
+
+
+class VerificationCodeLogin(BaseModel):
+    email: EmailStr
+    code: str = Field(..., min_length=6, max_length=6, description="6-digit verification code")
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8, description="New password (min 8 characters)")
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordReset(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=6, description="New password (min 6 characters)")
+
+
+class RegistrationVerification(BaseModel):
+    email: EmailStr
+    code: str = Field(..., min_length=6, max_length=6, description="6-digit verification code")

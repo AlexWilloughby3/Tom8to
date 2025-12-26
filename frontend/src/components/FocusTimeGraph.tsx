@@ -24,7 +24,7 @@ export default function FocusTimeGraph() {
     setLoading(true);
     try {
       const category = selectedCategory === 'all' ? undefined : selectedCategory;
-      const data = await graphService.getGraphData(user.userid, timeRange, category);
+      const data = await graphService.getGraphData(user.email, timeRange, category);
       setGraphData(data);
     } catch (error) {
       console.error('Failed to load graph data:', error);

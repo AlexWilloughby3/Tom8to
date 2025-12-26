@@ -5,6 +5,7 @@ from typing import Optional, List
 import bcrypt
 
 from . import models, schemas
+from . import email_service
 
 
 def hash_password(password: str) -> str:
@@ -26,15 +27,15 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 # ===== USER OPERATIONS =====
 
-def get_user(db: Session, userid: str) -> Optional[models.UserInformation]:
-    """Get a user by userid"""
-    return db.query(models.UserInformation).filter(models.UserInformation.userid == userid).first()
+def get_user(db: Session, email: str) -> Optional[models.UserInformation]:
+    """Get a user by email"""
+    return db.query(models.UserInformation).filter(models.UserInformation.email == email).first()
 
 
 def create_user(db: Session, user: schemas.UserCreate) -> models.UserInformation:
     """Create a new user with hashed password"""
     hashed_password = hash_password(user.password)
-    db_user = models.UserInformation(userid=user.userid, password=hashed_password)
+    db_user = models.UserInformation(email=user.email, password=hashed_password)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
@@ -42,16 +43,16 @@ def create_user(db: Session, user: schemas.UserCreate) -> models.UserInformation
     # Create default categories for new user
     default_categories = ['Work', 'Study', 'Reading', 'Exercise', 'Meditation']
     for cat_name in default_categories:
-        cat = models.CategoryInformation(userid=user.userid, category=cat_name)
+        cat = models.CategoryInformation(email=user.email, category=cat_name)
         db.add(cat)
     db.commit()
 
     return db_user
 
 
-def authenticate_user(db: Session, userid: str, password: str) -> Optional[models.UserInformation]:
+def authenticate_user(db: Session, email: str, password: str) -> Optional[models.UserInformation]:
     """Authenticate a user"""
-    user = get_user(db, userid)
+    user = get_user(db, email)
     if not user:
         return None
     if not verify_password(password, user.password):
@@ -59,9 +60,9 @@ def authenticate_user(db: Session, userid: str, password: str) -> Optional[model
     return user
 
 
-def delete_user(db: Session, userid: str) -> bool:
+def delete_user(db: Session, email: str) -> bool:
     """Delete a user and all their data"""
-    db_user = get_user(db, userid)
+    db_user = get_user(db, email)
     if db_user:
         db.delete(db_user)
         db.commit()
@@ -73,7 +74,7 @@ def delete_user(db: Session, userid: str) -> bool:
 
 def create_focus_session(
     db: Session,
-    userid: str,
+    email: str,
     focus_session: schemas.FocusSessionCreate,
     time: Optional[datetime] = None
 ) -> models.FocusInformation:
@@ -82,17 +83,17 @@ def create_focus_session(
         time = datetime.utcnow()
 
     # Auto-create category if it doesn't exist
-    category_obj = get_category(db, userid, focus_session.category)
+    category_obj = get_category(db, email, focus_session.category)
     if not category_obj:
         category_obj = models.CategoryInformation(
-            userid=userid,
+            email=email,
             category=focus_session.category
         )
         db.add(category_obj)
         db.commit()
 
     db_session = models.FocusInformation(
-        userid=userid,
+        email=email,
         time=time,
         focus_time_seconds=focus_session.focus_time_seconds,
         category=focus_session.category
@@ -105,7 +106,7 @@ def create_focus_session(
 
 def get_focus_sessions(
     db: Session,
-    userid: str,
+    email: str,
     skip: int = 0,
     limit: int = 100,
     category: Optional[str] = None,
@@ -113,7 +114,7 @@ def get_focus_sessions(
     end_date: Optional[datetime] = None
 ) -> List[models.FocusInformation]:
     """Get focus sessions for a user with optional filters"""
-    query = db.query(models.FocusInformation).filter(models.FocusInformation.userid == userid)
+    query = db.query(models.FocusInformation).filter(models.FocusInformation.email == email)
 
     if category:
         query = query.filter(models.FocusInformation.category == category)
@@ -125,17 +126,17 @@ def get_focus_sessions(
     return query.order_by(models.FocusInformation.time.desc()).offset(skip).limit(limit).all()
 
 
-def get_focus_session(db: Session, userid: str, time: datetime) -> Optional[models.FocusInformation]:
+def get_focus_session(db: Session, email: str, time: datetime) -> Optional[models.FocusInformation]:
     """Get a specific focus session"""
     return db.query(models.FocusInformation).filter(
-        models.FocusInformation.userid == userid,
+        models.FocusInformation.email == email,
         models.FocusInformation.time == time
     ).first()
 
 
-def delete_focus_session(db: Session, userid: str, time: datetime) -> bool:
+def delete_focus_session(db: Session, email: str, time: datetime) -> bool:
     """Delete a focus session"""
-    db_session = get_focus_session(db, userid, time)
+    db_session = get_focus_session(db, email, time)
     if db_session:
         db.delete(db_session)
         db.commit()
@@ -145,9 +146,9 @@ def delete_focus_session(db: Session, userid: str, time: datetime) -> bool:
 
 # ===== FOCUS GOAL OPERATIONS =====
 
-def create_focus_goal(db: Session, userid: str, goal: schemas.FocusGoalCreate) -> models.FocusGoalInformation:
+def create_focus_goal(db: Session, email: str, goal: schemas.FocusGoalCreate) -> models.FocusGoalInformation:
     """Create or update a focus goal for a category"""
-    db_goal = get_focus_goal(db, userid, goal.category)
+    db_goal = get_focus_goal(db, email, goal.category)
 
     if db_goal:
         # Update existing goal
@@ -155,7 +156,7 @@ def create_focus_goal(db: Session, userid: str, goal: schemas.FocusGoalCreate) -
     else:
         # Create new goal
         db_goal = models.FocusGoalInformation(
-            userid=userid,
+            email=email,
             category=goal.category,
             goal_time_per_week_seconds=goal.goal_time_per_week_seconds
         )
@@ -166,24 +167,24 @@ def create_focus_goal(db: Session, userid: str, goal: schemas.FocusGoalCreate) -
     return db_goal
 
 
-def get_focus_goal(db: Session, userid: str, category: str) -> Optional[models.FocusGoalInformation]:
+def get_focus_goal(db: Session, email: str, category: str) -> Optional[models.FocusGoalInformation]:
     """Get a specific focus goal"""
     return db.query(models.FocusGoalInformation).filter(
-        models.FocusGoalInformation.userid == userid,
+        models.FocusGoalInformation.email == email,
         models.FocusGoalInformation.category == category
     ).first()
 
 
-def get_focus_goals(db: Session, userid: str) -> List[models.FocusGoalInformation]:
+def get_focus_goals(db: Session, email: str) -> List[models.FocusGoalInformation]:
     """Get all focus goals for a user"""
     return db.query(models.FocusGoalInformation).filter(
-        models.FocusGoalInformation.userid == userid
+        models.FocusGoalInformation.email == email
     ).all()
 
 
-def delete_focus_goal(db: Session, userid: str, category: str) -> bool:
+def delete_focus_goal(db: Session, email: str, category: str) -> bool:
     """Delete a focus goal"""
-    db_goal = get_focus_goal(db, userid, category)
+    db_goal = get_focus_goal(db, email, category)
     if db_goal:
         db.delete(db_goal)
         db.commit()
@@ -195,7 +196,7 @@ def delete_focus_goal(db: Session, userid: str, category: str) -> bool:
 
 def get_user_stats(
     db: Session,
-    userid: str,
+    email: str,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None
 ) -> schemas.UserStats:
@@ -206,7 +207,7 @@ def get_user_stats(
         func.sum(models.FocusInformation.focus_time_seconds).label('total_time'),
         func.count(models.FocusInformation.time).label('session_count'),
         func.avg(models.FocusInformation.focus_time_seconds).label('avg_time')
-    ).filter(models.FocusInformation.userid == userid)
+    ).filter(models.FocusInformation.email == email)
 
     # Apply date filters
     if start_date:
@@ -218,7 +219,7 @@ def get_user_stats(
     category_stats = query.group_by(models.FocusInformation.category).all()
 
     # Get goals
-    goals = {goal.category: goal.goal_time_per_week_seconds for goal in get_focus_goals(db, userid)}
+    goals = {goal.category: goal.goal_time_per_week_seconds for goal in get_focus_goals(db, email)}
 
     # Build response
     categories = []
@@ -245,7 +246,7 @@ def get_user_stats(
         ))
 
     return schemas.UserStats(
-        userid=userid,
+        email=email,
         total_focus_time_seconds=total_time,
         total_sessions=total_sessions,
         categories=categories
@@ -254,9 +255,9 @@ def get_user_stats(
 
 # ===== CATEGORY OPERATIONS =====
 
-def create_category(db: Session, userid: str, category: schemas.CategoryCreate) -> models.CategoryInformation:
+def create_category(db: Session, email: str, category: schemas.CategoryCreate) -> models.CategoryInformation:
     """Create a new category for a user"""
-    db_category = get_category(db, userid, category.category)
+    db_category = get_category(db, email, category.category)
 
     if db_category:
         # Category already exists, just return it
@@ -264,7 +265,7 @@ def create_category(db: Session, userid: str, category: schemas.CategoryCreate) 
 
     # Create new category
     db_category = models.CategoryInformation(
-        userid=userid,
+        email=email,
         category=category.category
     )
     db.add(db_category)
@@ -273,34 +274,34 @@ def create_category(db: Session, userid: str, category: schemas.CategoryCreate) 
     return db_category
 
 
-def get_category(db: Session, userid: str, category: str) -> Optional[models.CategoryInformation]:
+def get_category(db: Session, email: str, category: str) -> Optional[models.CategoryInformation]:
     """Get a specific category"""
     return db.query(models.CategoryInformation).filter(
-        models.CategoryInformation.userid == userid,
+        models.CategoryInformation.email == email,
         models.CategoryInformation.category == category
     ).first()
 
 
-def get_categories(db: Session, userid: str) -> List[models.CategoryInformation]:
+def get_categories(db: Session, email: str) -> List[models.CategoryInformation]:
     """Get all categories for a user"""
     return db.query(models.CategoryInformation).filter(
-        models.CategoryInformation.userid == userid
+        models.CategoryInformation.email == email
     ).order_by(models.CategoryInformation.category).all()
 
 
-def delete_category(db: Session, userid: str, category: str) -> bool:
+def delete_category(db: Session, email: str, category: str) -> bool:
     """Delete a category and cascade delete all associated goals and focus sessions"""
-    db_category = get_category(db, userid, category)
+    db_category = get_category(db, email, category)
     if db_category:
         # Delete all focus goals for this category
         db.query(models.FocusGoalInformation).filter(
-            models.FocusGoalInformation.userid == userid,
+            models.FocusGoalInformation.email == email,
             models.FocusGoalInformation.category == category
         ).delete()
 
         # Delete all focus sessions for this category
         db.query(models.FocusInformation).filter(
-            models.FocusInformation.userid == userid,
+            models.FocusInformation.email == email,
             models.FocusInformation.category == category
         ).delete()
 
@@ -313,7 +314,7 @@ def delete_category(db: Session, userid: str, category: str) -> bool:
 
 # ===== GRAPH DATA OPERATIONS =====
 
-def get_graph_data(db: Session, userid: str, time_range: str, category: Optional[str] = None) -> schemas.GraphData:
+def get_graph_data(db: Session, email: str, time_range: str, category: Optional[str] = None) -> schemas.GraphData:
     """Get focus session data for graphing over a time period"""
     from datetime import datetime, timedelta
     from sqlalchemy import func
@@ -338,7 +339,7 @@ def get_graph_data(db: Session, userid: str, time_range: str, category: Optional
 
     # Query focus sessions
     query = db.query(models.FocusInformation).filter(
-        models.FocusInformation.userid == userid,
+        models.FocusInformation.email == email,
         models.FocusInformation.time >= start_date,
         models.FocusInformation.time <= today
     )
@@ -401,3 +402,187 @@ def get_graph_data(db: Session, userid: str, time_range: str, category: Optional
         time_range=time_range,
         category=category
     )
+
+
+# ===== VERIFICATION CODE OPERATIONS =====
+
+def get_verification_code(db: Session, email: str) -> Optional[models.VerificationCode]:
+    """Get verification code for an email"""
+    return db.query(models.VerificationCode).filter(models.VerificationCode.email == email).first()
+
+
+def create_verification_code(db: Session, email: str) -> str:
+    """Generate and store verification code, return code for emailing"""
+    code = email_service.generate_6_digit_code()
+    expires_at = email_service.get_code_expiry()
+
+    # Upsert (replace existing code if present)
+    db_code = get_verification_code(db, email)
+    if db_code:
+        db_code.code = code
+        db_code.created_at = datetime.utcnow()
+        db_code.expires_at = expires_at
+    else:
+        db_code = models.VerificationCode(
+            email=email,
+            code=code,
+            created_at=datetime.utcnow(),
+            expires_at=expires_at
+        )
+        db.add(db_code)
+
+    db.commit()
+    return code
+
+
+def verify_code(db: Session, email: str, code: str) -> bool:
+    """Verify code is correct and not expired"""
+    db_code = get_verification_code(db, email)
+    if not db_code:
+        return False
+
+    # Check expiry
+    if datetime.utcnow() > db_code.expires_at:
+        db.delete(db_code)  # Clean up expired code
+        db.commit()
+        return False
+
+    # Check code match
+    if db_code.code != code:
+        return False
+
+    # Code verified, delete it (single-use)
+    db.delete(db_code)
+    db.commit()
+    return True
+
+
+# ===== PASSWORD MANAGEMENT OPERATIONS =====
+
+def change_password(db: Session, email: str, current_password: str, new_password: str) -> bool:
+    """Change user password after verifying current password"""
+    user = authenticate_user(db, email, current_password)
+    if not user:
+        return False
+
+    user.password = hash_password(new_password)
+    db.commit()
+    return True
+
+
+def create_password_reset_token(db: Session, email: str) -> str:
+    """Generate and store password reset token, return token for emailing"""
+    import secrets
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.utcnow() + timedelta(hours=1)  # Token expires in 1 hour
+
+    db_token = models.PasswordResetToken(
+        token=token,
+        email=email,
+        created_at=datetime.utcnow(),
+        expires_at=expires_at,
+        used=0
+    )
+    db.add(db_token)
+    db.commit()
+    return token
+
+
+def reset_password_with_token(db: Session, token: str, new_password: str) -> bool:
+    """Reset password using a valid token"""
+    db_token = db.query(models.PasswordResetToken).filter(
+        models.PasswordResetToken.token == token
+    ).first()
+
+    if not db_token:
+        return False
+
+    # Check if token is expired
+    if datetime.utcnow() > db_token.expires_at:
+        db.delete(db_token)
+        db.commit()
+        return False
+
+    # Check if token has been used
+    if db_token.used == 1:
+        return False
+
+    # Get user and update password
+    user = get_user(db, db_token.email)
+    if not user:
+        return False
+
+    user.password = hash_password(new_password)
+    db_token.used = 1  # Mark token as used
+    db.commit()
+    return True
+
+
+# ===== PENDING REGISTRATION OPERATIONS =====
+
+def create_pending_registration(db: Session, email: str, password: str) -> str:
+    """Create pending registration and return verification code"""
+    # Hash the password
+    hashed_password = hash_password(password)
+
+    # Generate verification code
+    code = email_service.generate_6_digit_code()
+    expires_at = email_service.get_code_expiry()
+
+    # Delete any existing pending registration for this email
+    db.query(models.PendingRegistration).filter(
+        models.PendingRegistration.email == email
+    ).delete()
+
+    # Create new pending registration
+    pending_reg = models.PendingRegistration(
+        email=email,
+        password=hashed_password,
+        code=code,
+        created_at=datetime.utcnow(),
+        expires_at=expires_at
+    )
+    db.add(pending_reg)
+    db.commit()
+
+    return code
+
+
+def verify_registration_code(db: Session, email: str, code: str) -> bool:
+    """Verify registration code and create user if valid"""
+    # Get pending registration
+    pending_reg = db.query(models.PendingRegistration).filter(
+        models.PendingRegistration.email == email
+    ).first()
+
+    if not pending_reg:
+        return False
+
+    # Check if expired
+    if datetime.utcnow() > pending_reg.expires_at:
+        db.delete(pending_reg)
+        db.commit()
+        return False
+
+    # Check if code matches
+    if pending_reg.code != code:
+        return False
+
+    # Code is valid - create the user account
+    db_user = models.UserInformation(
+        email=pending_reg.email,
+        password=pending_reg.password  # Already hashed
+    )
+    db.add(db_user)
+
+    # Create default categories for new user
+    default_categories = ['Work', 'Study', 'Reading', 'Exercise', 'Meditation']
+    for cat_name in default_categories:
+        cat = models.CategoryInformation(email=pending_reg.email, category=cat_name)
+        db.add(cat)
+
+    # Delete the pending registration
+    db.delete(pending_reg)
+    db.commit()
+
+    return True

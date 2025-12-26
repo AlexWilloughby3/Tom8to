@@ -43,3 +43,20 @@
 .auth-footer a:hover {
   text-decoration: underline;
 }
+
+.back-arrow {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 0;
+  margin-bottom: 16px;
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.2s;
+}
+
+.back-arrow:hover {
+  color: #4CAF50;
+}

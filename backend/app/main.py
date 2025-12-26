@@ -1,10 +1,11 @@
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
 from datetime import datetime, timedelta
 
-from . import models, schemas, crud
+from . import models, schemas, crud, email_service
 from .database import engine, get_db
 
 # Create database tables
@@ -59,37 +60,52 @@ def health_check():
 
 # ===== USER ENDPOINTS =====
 
-@app.post("/api/users/register", response_model=schemas.User, status_code=201)
+@app.post("/api/users/register", status_code=200)
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    """Register a new user"""
-    db_user = crud.get_user(db, userid=user.userid)
+    """Initiate user registration by sending verification code to email"""
+    # Check if email is already registered
+    db_user = crud.get_user(db, email=user.email)
     if db_user:
-        raise HTTPException(status_code=400, detail="User ID already exists")
-    return crud.create_user(db=db, user=user)
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    # Check account limit (maximum 50 accounts)
+    user_count = db.query(func.count(models.UserInformation.email)).scalar()
+    if user_count >= 50:
+        raise HTTPException(status_code=403, detail="Account limit reached. Registration is currently unavailable.")
+
+    # Create pending registration and generate code
+    code = crud.create_pending_registration(db, email=user.email, password=user.password)
+
+    # Send verification email
+    email_sent = email_service.send_verification_code(user.email, code)
+    if not email_sent:
+        raise HTTPException(status_code=500, detail="Failed to send verification email")
+
+    return {"message": "Verification code sent to email. Please check your inbox."}
 
 
 @app.post("/api/users/login", response_model=schemas.User)
 def login_user(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
     """Login user and verify credentials"""
-    user = crud.authenticate_user(db, userid=credentials.userid, password=credentials.password)
+    user = crud.authenticate_user(db, email=credentials.email, password=credentials.password)
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Invalid email or password")
     return user
 
 
-@app.get("/api/users/{userid}", response_model=schemas.User)
-def get_user(userid: str, db: Session = Depends(get_db)):
+@app.get("/api/users/{email}", response_model=schemas.User)
+def get_user(email: str, db: Session = Depends(get_db)):
     """Get user information"""
-    db_user = crud.get_user(db, userid=userid)
+    db_user = crud.get_user(db, email=email)
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return db_user
 
 
-@app.delete("/api/users/{userid}", status_code=204)
-def delete_user(userid: str, db: Session = Depends(get_db)):
+@app.delete("/api/users/{email}", status_code=204)
+def delete_user(email: str, db: Session = Depends(get_db)):
     """Delete a user and all their data"""
-    success = crud.delete_user(db, userid=userid)
+    success = crud.delete_user(db, email=email)
     if not success:
         raise HTTPException(status_code=404, detail="User not found")
     return None
@@ -97,9 +113,9 @@ def delete_user(userid: str, db: Session = Depends(get_db)):
 
 # ===== FOCUS SESSION ENDPOINTS =====
 
-@app.post("/api/users/{userid}/focus-sessions", response_model=schemas.FocusSession, status_code=201)
+@app.post("/api/users/{email}/focus-sessions", response_model=schemas.FocusSession, status_code=201)
 def create_focus_session(
-    userid: str,
+    email: str,
     focus_session: schemas.FocusSessionCreate,
     db: Session = Depends(get_db)
 ):
@@ -109,16 +125,16 @@ def create_focus_session(
     Use this when the user completes a focus session.
     """
     # Verify user exists
-    user = crud.get_user(db, userid=userid)
+    user = crud.get_user(db, email=email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return crud.create_focus_session(db=db, userid=userid, focus_session=focus_session)
+    return crud.create_focus_session(db=db, email=email, focus_session=focus_session)
 
 
-@app.post("/api/users/{userid}/focus-sessions/with-time", response_model=schemas.FocusSession, status_code=201)
+@app.post("/api/users/{email}/focus-sessions/with-time", response_model=schemas.FocusSession, status_code=201)
 def create_focus_session_with_time(
-    userid: str,
+    email: str,
     focus_session: schemas.FocusSessionCreateWithTime,
     db: Session = Depends(get_db)
 ):
@@ -127,21 +143,21 @@ def create_focus_session_with_time(
     Use this for manual entry or importing historical data.
     """
     # Verify user exists
-    user = crud.get_user(db, userid=userid)
+    user = crud.get_user(db, email=email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     return crud.create_focus_session(
         db=db,
-        userid=userid,
+        email=email,
         focus_session=focus_session,
         time=focus_session.time
     )
 
 
-@app.get("/api/users/{userid}/focus-sessions", response_model=List[schemas.FocusSession])
+@app.get("/api/users/{email}/focus-sessions", response_model=List[schemas.FocusSession])
 def get_focus_sessions(
-    userid: str,
+    email: str,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     category: Optional[str] = None,
@@ -156,13 +172,13 @@ def get_focus_sessions(
     - end_date: Filter sessions before this date
     """
     # Verify user exists
-    user = crud.get_user(db, userid=userid)
+    user = crud.get_user(db, email=email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     return crud.get_focus_sessions(
         db=db,
-        userid=userid,
+        email=email,
         skip=skip,
         limit=limit,
         category=category,
@@ -171,14 +187,14 @@ def get_focus_sessions(
     )
 
 
-@app.delete("/api/users/{userid}/focus-sessions/{timestamp}", status_code=204)
+@app.delete("/api/users/{email}/focus-sessions/{timestamp}", status_code=204)
 def delete_focus_session(
-    userid: str,
+    email: str,
     timestamp: datetime,
     db: Session = Depends(get_db)
 ):
     """Delete a specific focus session"""
-    success = crud.delete_focus_session(db, userid=userid, time=timestamp)
+    success = crud.delete_focus_session(db, email=email, time=timestamp)
     if not success:
         raise HTTPException(status_code=404, detail="Focus session not found")
     return None
@@ -186,45 +202,45 @@ def delete_focus_session(
 
 # ===== FOCUS GOAL ENDPOINTS =====
 
-@app.post("/api/users/{userid}/focus-goals", response_model=schemas.FocusGoal, status_code=201)
+@app.post("/api/users/{email}/focus-goals", response_model=schemas.FocusGoal, status_code=201)
 def create_focus_goal(
-    userid: str,
+    email: str,
     goal: schemas.FocusGoalCreate,
     db: Session = Depends(get_db)
 ):
     """Create or update a focus goal for a category"""
     # Verify user exists
-    user = crud.get_user(db, userid=userid)
+    user = crud.get_user(db, email=email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return crud.create_focus_goal(db=db, userid=userid, goal=goal)
+    return crud.create_focus_goal(db=db, email=email, goal=goal)
 
 
-@app.get("/api/users/{userid}/focus-goals", response_model=List[schemas.FocusGoal])
-def get_focus_goals(userid: str, db: Session = Depends(get_db)):
+@app.get("/api/users/{email}/focus-goals", response_model=List[schemas.FocusGoal])
+def get_focus_goals(email: str, db: Session = Depends(get_db)):
     """Get all focus goals for a user"""
     # Verify user exists
-    user = crud.get_user(db, userid=userid)
+    user = crud.get_user(db, email=email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return crud.get_focus_goals(db=db, userid=userid)
+    return crud.get_focus_goals(db=db, email=email)
 
 
-@app.get("/api/users/{userid}/focus-goals/{category}", response_model=schemas.FocusGoal)
-def get_focus_goal(userid: str, category: str, db: Session = Depends(get_db)):
+@app.get("/api/users/{email}/focus-goals/{category}", response_model=schemas.FocusGoal)
+def get_focus_goal(email: str, category: str, db: Session = Depends(get_db)):
     """Get a specific focus goal"""
-    db_goal = crud.get_focus_goal(db, userid=userid, category=category)
+    db_goal = crud.get_focus_goal(db, email=email, category=category)
     if db_goal is None:
         raise HTTPException(status_code=404, detail="Focus goal not found")
     return db_goal
 
 
-@app.delete("/api/users/{userid}/focus-goals/{category}", status_code=204)
-def delete_focus_goal(userid: str, category: str, db: Session = Depends(get_db)):
+@app.delete("/api/users/{email}/focus-goals/{category}", status_code=204)
+def delete_focus_goal(email: str, category: str, db: Session = Depends(get_db)):
     """Delete a focus goal"""
-    success = crud.delete_focus_goal(db, userid=userid, category=category)
+    success = crud.delete_focus_goal(db, email=email, category=category)
     if not success:
         raise HTTPException(status_code=404, detail="Focus goal not found")
     return None
@@ -232,9 +248,9 @@ def delete_focus_goal(userid: str, category: str, db: Session = Depends(get_db))
 
 # ===== STATISTICS ENDPOINTS =====
 
-@app.get("/api/users/{userid}/stats", response_model=schemas.UserStats)
+@app.get("/api/users/{email}/stats", response_model=schemas.UserStats)
 def get_user_stats(
-    userid: str,
+    email: str,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     db: Session = Depends(get_db)
@@ -245,20 +261,20 @@ def get_user_stats(
     - end_date: Calculate stats until this date
     """
     # Verify user exists
-    user = crud.get_user(db, userid=userid)
+    user = crud.get_user(db, email=email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     return crud.get_user_stats(
         db=db,
-        userid=userid,
+        email=email,
         start_date=start_date,
         end_date=end_date
     )
 
 
-@app.get("/api/users/{userid}/stats/weekly", response_model=schemas.UserStats)
-def get_weekly_stats(userid: str, db: Session = Depends(get_db)):
+@app.get("/api/users/{email}/stats/weekly", response_model=schemas.UserStats)
+def get_weekly_stats(email: str, db: Session = Depends(get_db)):
     """Get statistics for the current week"""
     # Calculate start of current week (Monday)
     today = datetime.utcnow()
@@ -267,7 +283,7 @@ def get_weekly_stats(userid: str, db: Session = Depends(get_db)):
 
     return crud.get_user_stats(
         db=db,
-        userid=userid,
+        email=email,
         start_date=start_of_week,
         end_date=today
     )
@@ -275,36 +291,36 @@ def get_weekly_stats(userid: str, db: Session = Depends(get_db)):
 
 # ===== CATEGORY ENDPOINTS =====
 
-@app.post("/api/users/{userid}/categories", response_model=schemas.Category, status_code=201)
+@app.post("/api/users/{email}/categories", response_model=schemas.Category, status_code=201)
 def create_category(
-    userid: str,
+    email: str,
     category: schemas.CategoryCreate,
     db: Session = Depends(get_db)
 ):
     """Create a new category for a user"""
     # Verify user exists
-    user = crud.get_user(db, userid=userid)
+    user = crud.get_user(db, email=email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return crud.create_category(db=db, userid=userid, category=category)
+    return crud.create_category(db=db, email=email, category=category)
 
 
-@app.get("/api/users/{userid}/categories", response_model=List[schemas.Category])
-def get_categories(userid: str, db: Session = Depends(get_db)):
+@app.get("/api/users/{email}/categories", response_model=List[schemas.Category])
+def get_categories(email: str, db: Session = Depends(get_db)):
     """Get all categories for a user"""
     # Verify user exists
-    user = crud.get_user(db, userid=userid)
+    user = crud.get_user(db, email=email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return crud.get_categories(db=db, userid=userid)
+    return crud.get_categories(db=db, email=email)
 
 
-@app.delete("/api/users/{userid}/categories/{category}", status_code=204)
-def delete_category(userid: str, category: str, db: Session = Depends(get_db)):
+@app.delete("/api/users/{email}/categories/{category}", status_code=204)
+def delete_category(email: str, category: str, db: Session = Depends(get_db)):
     """Delete a category"""
-    success = crud.delete_category(db, userid=userid, category=category)
+    success = crud.delete_category(db, email=email, category=category)
     if not success:
         raise HTTPException(status_code=404, detail="Category not found")
     return None
@@ -312,16 +328,16 @@ def delete_category(userid: str, category: str, db: Session = Depends(get_db)):
 
 # ===== GRAPH DATA ENDPOINTS =====
 
-@app.get("/api/users/{userid}/graph-data", response_model=schemas.GraphData)
+@app.get("/api/users/{email}/graph-data", response_model=schemas.GraphData)
 def get_graph_data(
-    userid: str,
+    email: str,
     time_range: str,
     category: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """Get graph data for focus time visualization"""
     # Verify user exists
-    user = crud.get_user(db, userid=userid)
+    user = crud.get_user(db, email=email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -330,4 +346,103 @@ def get_graph_data(
     if time_range not in valid_ranges:
         raise HTTPException(status_code=400, detail=f"Invalid time_range. Must be one of: {', '.join(valid_ranges)}")
 
-    return crud.get_graph_data(db=db, userid=userid, time_range=time_range, category=category)
+    return crud.get_graph_data(db=db, email=email, time_range=time_range, category=category)
+
+
+# ===== AUTHENTICATION & VERIFICATION ENDPOINTS =====
+
+@app.post("/api/users/request-verification-code", status_code=200)
+def request_verification_code(request: schemas.VerificationCodeRequest, db: Session = Depends(get_db)):
+    """Send verification code to email for passwordless login"""
+    # Check if user exists
+    user = crud.get_user(db, email=request.email)
+    if not user:
+        # Don't reveal if email exists (security best practice)
+        return {"message": "If email is registered, verification code has been sent"}
+
+    # Generate and send code
+    code = crud.create_verification_code(db, email=request.email)
+    email_sent = email_service.send_verification_code(request.email, code)
+
+    if not email_sent:
+        raise HTTPException(status_code=500, detail="Failed to send verification code")
+
+    return {"message": "Verification code sent to email"}
+
+
+@app.post("/api/users/verify-registration", response_model=schemas.User, status_code=201)
+def verify_registration(credentials: schemas.RegistrationVerification, db: Session = Depends(get_db)):
+    """Verify registration code and complete account creation"""
+    # Verify code and create user
+    success = crud.verify_registration_code(db, email=credentials.email, code=credentials.code)
+    if not success:
+        raise HTTPException(status_code=401, detail="Invalid or expired verification code")
+
+    # Get and return the newly created user
+    user = crud.get_user(db, email=credentials.email)
+    if not user:
+        raise HTTPException(status_code=500, detail="User creation failed")
+
+    return user
+
+
+@app.post("/api/users/login-with-code", response_model=schemas.User)
+def login_with_verification_code(credentials: schemas.VerificationCodeLogin, db: Session = Depends(get_db)):
+    """Login using email + verification code (passwordless)"""
+    # Verify code
+    if not crud.verify_code(db, email=credentials.email, code=credentials.code):
+        raise HTTPException(status_code=401, detail="Invalid or expired verification code")
+
+    # Return user (code verification proves identity)
+    user = crud.get_user(db, email=credentials.email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return user
+
+
+@app.post("/api/users/{email}/change-password", status_code=200)
+def change_password(email: str, request: schemas.PasswordChangeRequest, db: Session = Depends(get_db)):
+    """Change user password"""
+    success = crud.change_password(
+        db,
+        email=email,
+        current_password=request.current_password,
+        new_password=request.new_password
+    )
+    if not success:
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+
+    # Send confirmation email (optional)
+    email_service.send_password_reset_confirmation(email)
+
+    return {"message": "Password changed successfully"}
+
+
+@app.post("/api/users/request-password-reset", status_code=200)
+def request_password_reset(request: schemas.PasswordResetRequest, db: Session = Depends(get_db)):
+    """Send password reset link to email"""
+    # Check if user exists
+    user = crud.get_user(db, email=request.email)
+    if not user:
+        # Don't reveal if email exists (security best practice)
+        return {"message": "If email is registered, password reset link has been sent"}
+
+    # Generate and send reset token
+    token = crud.create_password_reset_token(db, email=request.email)
+    email_sent = email_service.send_password_reset_link(request.email, token)
+
+    if not email_sent:
+        raise HTTPException(status_code=500, detail="Failed to send password reset email")
+
+    return {"message": "Password reset link sent to email"}
+
+
+@app.post("/api/users/reset-password", status_code=200)
+def reset_password(request: schemas.PasswordReset, db: Session = Depends(get_db)):
+    """Reset password using token"""
+    success = crud.reset_password_with_token(db, token=request.token, new_password=request.new_password)
+    if not success:
+        raise HTTPException(status_code=401, detail="Invalid or expired reset token")
+
+    return {"message": "Password reset successfully"}

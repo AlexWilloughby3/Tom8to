@@ -1,16 +1,16 @@
 export interface User {
-  userid: string;
+  email: string;
 }
 
 export interface FocusSession {
-  userid: string;
+  email: string;
   time: string;
   focus_time_seconds: number;
   category: string;
 }
 
 export interface FocusGoal {
-  userid: string;
+  email: string;
   category: string;
   goal_time_per_week_seconds: number;
 }
@@ -25,19 +25,19 @@ export interface CategoryStats {
 }
 
 export interface UserStats {
-  userid: string;
+  email: string;
   total_focus_time_seconds: number;
   total_sessions: number;
   categories: CategoryStats[];
 }
 
 export interface LoginCredentials {
-  userid: string;
+  email: string;
   password: string;
 }
 
 export interface RegisterData {
-  userid: string;
+  email: string;
   password: string;
 }
 
@@ -52,7 +52,7 @@ export interface FocusGoalCreate {
 }
 
 export interface Category {
-  userid: string;
+  email: string;
   category: string;
 }
 
@@ -72,3 +72,18 @@ export interface GraphData {
 }
 
 export type TimeRange = 'week' | 'month' | '6month' | 'ytd';
+
+// New types for verification code and password management
+export interface VerificationCodeRequest {
+  email: string;
+}
+
+export interface VerificationCodeLogin {
+  email: string;
+  code: string;
+}
+
+export interface PasswordChangeRequest {
+  current_password: string;
+  new_password: string;
+}

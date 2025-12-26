@@ -50,19 +50,19 @@ describe('Login Component', () => {
 
   it('should handle successful login', async () => {
     const user = userEvent.setup();
-    const mockUser = { userid: 'testuser' };
+    const mockUser = { email: 'testuser@example.com' };
 
     vi.mocked(authService.login).mockResolvedValue(mockUser);
 
     renderLogin();
 
-    await user.type(screen.getByLabelText(/user id/i), 'testuser');
+    await user.type(screen.getByLabelText(/email/i), 'testuser@example.com');
     await user.type(screen.getByLabelText(/password/i), 'password123');
     await user.click(screen.getByRole('button', { name: /login/i }));
 
     await waitFor(() => {
       expect(authService.login).toHaveBeenCalledWith({
-        userid: 'testuser',
+        email: 'testuser@example.com',
         password: 'password123',
       });
       expect(mockNavigate).toHaveBeenCalledWith('/');
@@ -76,7 +76,7 @@ describe('Login Component', () => {
 
     renderLogin();
 
-    await user.type(screen.getByLabelText(/user id/i), 'wronguser');
+    await user.type(screen.getByLabelText(/email/i), 'wronguser@example.com');
     await user.type(screen.getByLabelText(/password/i), 'wrongpass');
     await user.click(screen.getByRole('button', { name: /login/i }));
 

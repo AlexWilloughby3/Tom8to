@@ -26,6 +26,8 @@ services:
       dockerfile: Dockerfile
     container_name: fastapi_app
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-app_db}
     ports:

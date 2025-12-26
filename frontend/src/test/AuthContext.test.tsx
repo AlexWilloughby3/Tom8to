@@ -10,8 +10,8 @@ function TestComponent() {
   return (
     <div>
       <div data-testid="auth-status">{isAuthenticated ? 'authenticated' : 'not authenticated'}</div>
-      <div data-testid="user-id">{user?.userid || 'no user'}</div>
-      <button onClick={() => login({ userid: 'testuser' } as User)}>Login</button>
+        <div data-testid="user-id">{user?.email || 'no user'}</div>
+          <button onClick={() => login({ email: 'test@example.com' } as User)}>Login</button>
       <button onClick={logout}>Logout</button>
     </div>
   );
@@ -45,7 +45,7 @@ describe('AuthContext', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('auth-status')).toHaveTextContent('authenticated');
-      expect(screen.getByTestId('user-id')).toHaveTextContent('testuser');
+      expect(screen.getByTestId('user-id')).toHaveTextContent('test@example.com');
     });
   });
 
@@ -62,12 +62,12 @@ describe('AuthContext', () => {
     await waitFor(() => {
       const storedUser = localStorage.getItem('user');
       expect(storedUser).toBeTruthy();
-      expect(JSON.parse(storedUser!).userid).toBe('testuser');
+      expect(JSON.parse(storedUser!).email).toBe('test@example.com');
     });
   });
 
   it('should restore user from localStorage', () => {
-    const user: User = { userid: 'storeduser' };
+    const user: User = { email: 'storeduser@example.com' };
     localStorage.setItem('user', JSON.stringify(user));
 
     render(
@@ -77,11 +77,11 @@ describe('AuthContext', () => {
     );
 
     expect(screen.getByTestId('auth-status')).toHaveTextContent('authenticated');
-    expect(screen.getByTestId('user-id')).toHaveTextContent('storeduser');
+    expect(screen.getByTestId('user-id')).toHaveTextContent('storeduser@example.com');
   });
 
   it('should log out a user', async () => {
-    localStorage.setItem('user', JSON.stringify({ userid: 'testuser' }));
+    localStorage.setItem('user', JSON.stringify({ email: 'testuser@example.com' }));
 
     render(
       <AuthProvider>

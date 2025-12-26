@@ -9,52 +9,74 @@
 
 -- Table 1: User information
 CREATE TABLE IF NOT EXISTS user_information (
-    userid VARCHAR(255) PRIMARY KEY,
+    email VARCHAR(255) PRIMARY KEY,
     password VARCHAR(255) NOT NULL
 );
 
 -- Table 2: Focus information
 CREATE TABLE IF NOT EXISTS focus_information (
-    userid VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL,
     time TIMESTAMP NOT NULL,
     focus_time_seconds INTEGER NOT NULL,
     category VARCHAR(255) NOT NULL,
-    PRIMARY KEY (userid, time),
-    FOREIGN KEY (userid) REFERENCES user_information(userid) ON DELETE CASCADE
+    PRIMARY KEY (email, time),
+    FOREIGN KEY (email) REFERENCES user_information(email) ON DELETE CASCADE
 );
 
 -- Table 3: Focus goal information
 CREATE TABLE IF NOT EXISTS focus_goal_information (
-    userid VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL,
     category VARCHAR(255) NOT NULL,
     goal_time_per_week_seconds INTEGER NOT NULL,
-    PRIMARY KEY (userid, category),
-    FOREIGN KEY (userid) REFERENCES user_information(userid) ON DELETE CASCADE
+    PRIMARY KEY (email, category),
+    FOREIGN KEY (email) REFERENCES user_information(email) ON DELETE CASCADE
+);
+
+-- Table 4: Category information
+CREATE TABLE IF NOT EXISTS category_information (
+    email VARCHAR(255) NOT NULL,
+    category VARCHAR(255) NOT NULL,
+    PRIMARY KEY (email, category),
+    FOREIGN KEY (email) REFERENCES user_information(email) ON DELETE CASCADE
+);
+
+-- Table 5: Verification codes for passwordless login
+CREATE TABLE IF NOT EXISTS verification_codes (
+    email VARCHAR(255) PRIMARY KEY,
+    code VARCHAR(6) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL
+);
+
+-- Table 6: Password reset tokens
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    token VARCHAR(255) PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    used INTEGER NOT NULL DEFAULT 0
+);
+
+-- Table 7: Pending registrations awaiting email verification
+CREATE TABLE IF NOT EXISTS pending_registrations (
+    email VARCHAR(255) PRIMARY KEY,
+    password VARCHAR(255) NOT NULL,
+    code VARCHAR(6) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL
 );
 
 -- Create indexes for better query performance
-CREATE INDEX IF NOT EXISTS idx_focus_information_userid ON focus_information(userid);
+CREATE INDEX IF NOT EXISTS idx_focus_information_email ON focus_information(email);
 CREATE INDEX IF NOT EXISTS idx_focus_information_time ON focus_information(time);
 CREATE INDEX IF NOT EXISTS idx_focus_information_category ON focus_information(category);
-CREATE INDEX IF NOT EXISTS idx_focus_goal_information_userid ON focus_goal_information(userid);
+CREATE INDEX IF NOT EXISTS idx_focus_goal_information_email ON focus_goal_information(email);
+CREATE INDEX IF NOT EXISTS idx_verification_codes_expires_at ON verification_codes(expires_at);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_email ON password_reset_tokens(email);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires_at ON password_reset_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_pending_registrations_expires_at ON pending_registrations(expires_at);
 
--- Insert some sample data for testing (optional - remove in production)
-INSERT INTO user_information (userid, password) VALUES
-    ('user1', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYdNq7Z8dFa'),  -- hashed password for 'password123'
-    ('user2', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYdNq7Z8dFa')
-ON CONFLICT (userid) DO NOTHING;
-
-INSERT INTO focus_information (userid, time, focus_time_seconds, category) VALUES
-    ('user1', '2025-01-01 10:00:00', 3600, 'Work'),
-    ('user1', '2025-01-01 15:00:00', 1800, 'Study'),
-    ('user2', '2025-01-01 09:00:00', 7200, 'Work')
-ON CONFLICT (userid, time) DO NOTHING;
-
-INSERT INTO focus_goal_information (userid, category, goal_time_per_week_seconds) VALUES
-    ('user1', 'Work', 144000),      -- 40 hours per week
-    ('user1', 'Study', 36000),      -- 10 hours per week
-    ('user2', 'Work', 180000)       -- 50 hours per week
-ON CONFLICT (userid, category) DO NOTHING;
+-- Sample data removed for production database
 
 -- Grant privileges (if needed)
 -- GRANT ALL PRIVILEGES ON DATABASE app_db TO postgres;

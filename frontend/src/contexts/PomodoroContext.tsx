@@ -96,7 +96,7 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
   const loadCategories = async () => {
     if (!user) return;
     try {
-      const data = await categoryService.getCategories(user.userid);
+      const data = await categoryService.getCategories(user.email);
       setCategories(data);
       // Set default category to first available if current is empty
       if (!pomodoroCategory && data.length > 0) {
@@ -191,7 +191,7 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
     const finalWorkTime = totalWorkTime + currentWorkProgress;
 
     try {
-      await focusSessionService.createSession(user.userid, {
+      await focusSessionService.createSession(user.email, {
         category: selectedCategory,
         focus_time_seconds: finalWorkTime,
       });
@@ -309,7 +309,7 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      await focusSessionService.createSession(user.userid, {
+      await focusSessionService.createSession(user.email, {
         category: selectedCategory,
         focus_time_seconds: stopwatchSeconds,
       });

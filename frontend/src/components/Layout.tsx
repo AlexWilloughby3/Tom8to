@@ -60,12 +60,13 @@ export default function Layout() {
           <div className="nav-content">
             <div className="nav-brand">
               <h2>Tomato</h2>
-              <span className="user-id">@{user?.userid}</span>
+              <span className="user-id">@{user?.email}</span>
             </div>
             <div className="nav-links">
               <Link to="/" className="nav-link">Dashboard</Link>
               <Link to="/timer" className="nav-link">Timer</Link>
               <Link to="/goals" className="nav-link">Goals</Link>
+              <Link to="/settings" className="nav-link">Settings</Link>
               <button onClick={handleLogout} className="btn btn-secondary">Logout</button>
             </div>
           </div>

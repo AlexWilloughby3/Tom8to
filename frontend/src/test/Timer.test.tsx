@@ -15,7 +15,7 @@ vi.mock('../api/services', () => ({
 
 function renderTimer() {
   // Set up a logged-in user
-  localStorage.setItem('user', JSON.stringify({ userid: 'testuser' }));
+  localStorage.setItem('user', JSON.stringify({ email: 'testuser@example.com' }));
 
   return render(
     <BrowserRouter>
@@ -72,7 +72,7 @@ describe('Timer Component', () => {
   it('should save focus session when stopped', async () => {
     const user = userEvent.setup({ delay: null });
     vi.mocked(focusSessionService.createSession).mockResolvedValue({
-      userid: 'testuser',
+      email: 'testuser@example.com',
       category: 'Work',
       focus_time_seconds: 10,
       time: new Date().toISOString(),
@@ -97,7 +97,7 @@ describe('Timer Component', () => {
     await user.click(screen.getByRole('button', { name: /save session/i }));
 
     await waitFor(() => {
-      expect(focusSessionService.createSession).toHaveBeenCalledWith('testuser', {
+      expect(focusSessionService.createSession).toHaveBeenCalledWith('testuser@example.com', {
         category: 'Work',
         focus_time_seconds: 10,
       });

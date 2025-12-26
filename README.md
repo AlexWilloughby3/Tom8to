@@ -89,6 +89,7 @@ A full-stack focus time tracking application with a React TypeScript frontend ho
 - User registration with hashed passwords (bcrypt)
 - User authentication and login
 - Session persistence
+ - Settings page: change password and delete account
 
 ### Focus Timer
 - Start/pause/resume timer
@@ -112,6 +113,8 @@ A full-stack focus time tracking application with a React TypeScript frontend ho
 #### Authentication
 - `POST /api/users/register` - Register new user
 - `POST /api/users/login` - Login user
+ - `POST /api/users/{email}/change-password` - Change user password (requires current password)
+ - `DELETE /api/users/{email}` - Delete user account
 
 #### Focus Sessions
 - `POST /api/users/{userid}/focus-sessions` - Create focus session

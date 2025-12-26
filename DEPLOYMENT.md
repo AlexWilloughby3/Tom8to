@@ -1,233 +1,343 @@
-# Deployment Guide
+# Deployment Guide - Tomato Focus Tracker
 
-This document explains how to deploy the Focus Tracker application to EC2 using the new git-based deployment strategy.
+## Prerequisites
 
-## Architecture
+- EC2 instance running Ubuntu (t2.micro or larger)
+- Domain pointed to your EC2 IP address
+- SSH access to EC2 instance
+- Git installed on EC2
 
-### Secrets Management
+## Part 1: Initial EC2 Setup
 
-Secrets are stored **outside the repository** to keep them secure:
-
-- **Local (Mac)**: `../AppForDadSecrets/`
-  - Contains: `.env`, `Carl.pem`, `carl2.pem`, `carl3private.pem`
-  - Symlinked to `./secrets/` for local development
-
-- **EC2**: `~/secrets/`
-  - Contains: `.env`, `carl2.pem`, `carl3private.pem`
-  - Symlinked from `~/focus-tracker/secrets/` to `~/secrets/`
-
-### Deployment Strategy
-
-Instead of copying files to EC2, we now use **git pull** for deployments. This allows for:
-- Faster deployments (only changed files are transferred)
-- Selective container rebuilds (docker-compose only rebuilds changed services)
-- Better version control and rollback capabilities
-- Easier debugging (you can SSH to EC2 and see exact code state)
-
-## Initial Setup
-
-### 1. Set up Local Secrets Directory
-
-Your secrets should already be in `../AppForDadSecrets/`. Verify:
-
+### 1.1 Connect to EC2
 ```bash
-ls -la ../AppForDadSecrets/
-# Should contain: .env, Carl.pem, carl2.pem, carl3private.pem
+ssh -i your-key.pem ubuntu@your-ec2-ip
 ```
 
-The repository has a symlink `secrets/` → `../AppForDadSecrets/` for local development.
-
-### 2. Update Git Repository URL
-
-Edit [setup-ec2.sh](setup-ec2.sh) and update the `GIT_REPO` variable:
-
+### 1.2 Install Docker and Docker Compose
 ```bash
-GIT_REPO="https://github.com/YOUR_USERNAME/YOUR_REPO.git"
+# Update packages
+sudo apt update && sudo apt upgrade -y
+
+# Install Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+
+# Add user to docker group
+sudo usermod -aG docker ubuntu
+
+# Install Docker Compose
+sudo apt install docker-compose -y
+
+# Verify installation
+docker --version
+docker-compose --version
+
+# Log out and log back in for group changes to take effect
+exit
+ssh -i your-key.pem ubuntu@your-ec2-ip
 ```
 
-Replace with your actual GitHub repository URL.
-
-### 3. Run Initial Setup
-
-**IMPORTANT**: Only run this once for initial setup:
-
+### 1.3 Install Node.js (for building frontend)
 ```bash
-./setup-ec2.sh
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+node --version
+npm --version
 ```
 
-This script will:
-1. Create `~/secrets/` directory on EC2
-2. Copy secrets from `../AppForDadSecrets/` to EC2
-3. Install required software (git, Node.js, Docker)
-4. Clone your repository to `~/focus-tracker/`
-5. Create symlink from `~/focus-tracker/secrets/` to `~/secrets/`
-6. Build frontend and start Docker containers
+## Part 2: Deploy Application
 
-## Regular Deployment
-
-After initial setup, deploy updates with:
-
+### 2.1 Clone Repository
 ```bash
-./deploy-to-ec2.sh
+cd ~
+git clone https://github.com/YOUR-USERNAME/YOUR-REPO.git
+cd YOUR-REPO
 ```
 
-This script:
-1. SSHs to EC2
-2. Runs `git pull` to get latest code
-3. Builds frontend (`npm install && npm run build`)
-4. Runs `docker-compose up -d --build`
-   - Only rebuilds containers with changed code
-   - Database container won't rebuild if only API/frontend changed
+### 2.2 Set Up Environment Variables
 
-## Manual Deployment (from EC2)
+**IMPORTANT SECURITY NOTE:** Your `.env` file contains sensitive credentials and should NEVER be committed to git!
 
-You can also SSH to EC2 and deploy manually:
-
+Create a secure `.env` file on the server:
 ```bash
-# SSH to EC2
-ssh -i ../AppForDadSecrets/Carl.pem ec2-user@107.21.171.155
+# Create .env file
+nano .env
+```
 
-# Navigate to project
-cd ~/focus-tracker
+Add the following (replace with your actual values):
+```env
+# Database Configuration
+POSTGRES_USER=your_secure_username
+POSTGRES_PASSWORD=your_secure_password_here
+POSTGRES_DB=app_db
 
-# Pull latest code
-git pull
+# Application Configuration
+DATABASE_URL=postgresql://your_secure_username:your_secure_password_here@db:5432/app_db
 
-# Build frontend
+# API Configuration
+API_HOST=0.0.0.0
+API_PORT=8000
+
+# Email Configuration (Gmail SMTP)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your-email@gmail.com
+SMTP_PASSWORD=your-16-char-app-password
+SMTP_FROM_EMAIL=your-email@gmail.com
+SMTP_FROM_NAME=Tomato Focus Tracker
+
+# Frontend Configuration
+FRONTEND_URL=https://your-domain.com
+```
+
+**Generate a strong password:**
+```bash
+# Generate a random 32-character password
+openssl rand -base64 32
+```
+
+### 2.3 Build Frontend
+```bash
 cd frontend
 npm install
 npm run build
 cd ..
+```
 
-# Restart containers (only rebuilds changed services)
+### 2.4 Set Up SSL Certificates (if using Cloudflare)
+
+If you have Cloudflare certificates:
+```bash
+# Create secrets directory
+mkdir -p secrets
+
+# Copy your certificates (from your local machine)
+# On your local machine:
+scp -i your-key.pem carl2.pem ubuntu@your-ec2-ip:~/YOUR-REPO/secrets/
+scp -i your-key.pem carl3private.pem ubuntu@your-ec2-ip:~/YOUR-REPO/secrets/
+```
+
+### 2.5 Start Services
+```bash
+# Start in production mode
+docker-compose -f docker-compose.yml up -d
+
+# Or if using production config without nginx:
+docker-compose -f docker-compose.prod.yml up -d
+
+# View logs
+docker-compose logs -f
+
+# Check running containers
+docker-compose ps
+```
+
+## Part 3: Verify Deployment
+
+### 3.1 Test Backend API
+```bash
+curl http://localhost:8000/
+curl http://localhost:8000/api/health
+```
+
+### 3.2 Test Frontend
+Open browser to `http://your-ec2-ip` or `https://your-domain.com`
+
+### 3.3 Test Email
+Try registering a new account to verify email verification codes are being sent.
+
+## Part 4: Updates and Redeployment
+
+### 4.1 Pull Latest Changes
+```bash
+cd ~/YOUR-REPO
+git pull origin main
+```
+
+### 4.2 Rebuild Frontend (if frontend changed)
+```bash
+cd frontend
+npm install  # If package.json changed
+npm run build
+cd ..
+```
+
+### 4.3 Rebuild Backend (if backend changed)
+```bash
+# Rebuild and restart
+docker-compose down
+docker-compose build api
+docker-compose up -d
+```
+
+### 4.4 Restart Services
+```bash
+# Quick restart (no rebuild)
+docker-compose restart
+
+# Or full restart with rebuild
+docker-compose down
+docker-compose up -d --build
+```
+
+## Part 5: Database Management
+
+See [DATABASE_RESET.md](DATABASE_RESET.md) for database reset instructions.
+
+## Part 6: Admin CLI
+
+### 6.1 Run Admin Tool
+```bash
+# SSH into EC2
+ssh -i your-key.pem ubuntu@your-ec2-ip
+
+# Navigate to backend
+cd ~/YOUR-REPO/backend
+
+# Run admin CLI
+python3 admin.py
+```
+
+### 6.2 Admin Functions
+- List all accounts
+- View account details
+- Delete inactive accounts
+- Check account limit (50 max)
+
+## Part 7: Monitoring
+
+### 7.1 View Logs
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f api
+docker-compose logs -f db
+docker-compose logs -f frontend
+
+# Last 100 lines
+docker-compose logs --tail=100 api
+```
+
+### 7.2 Check Container Status
+```bash
+docker-compose ps
+docker stats
+```
+
+### 7.3 Check Disk Usage
+```bash
+df -h
+docker system df
+```
+
+## Part 8: Security Best Practices
+
+### 8.1 Firewall Setup
+```bash
+# Allow SSH
+sudo ufw allow 22/tcp
+
+# Allow HTTP/HTTPS
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+
+# Enable firewall
+sudo ufw enable
+```
+
+### 8.2 Keep System Updated
+```bash
+sudo apt update && sudo apt upgrade -y
+```
+
+### 8.3 Backup Database
+```bash
+# Create backup
+docker-compose exec db pg_dump -U postgres app_db > backup.sql
+
+# Or with timestamp
+docker-compose exec db pg_dump -U postgres app_db > backup_$(date +%Y%m%d_%H%M%S).sql
+```
+
+## Part 9: Troubleshooting
+
+### 9.1 Container Won't Start
+```bash
+# Check logs
+docker-compose logs api
+
+# Restart specific service
+docker-compose restart api
+```
+
+### 9.2 Database Connection Issues
+```bash
+# Check database is running
+docker-compose ps db
+
+# Check database logs
+docker-compose logs db
+
+# Connect to database directly
+docker-compose exec db psql -U postgres -d app_db
+```
+
+### 9.3 Permission Issues
+```bash
+# Fix ownership
+sudo chown -R ubuntu:ubuntu ~/YOUR-REPO
+
+# Fix permissions
+chmod 600 secrets/*.pem
+```
+
+### 9.4 Out of Memory
+```bash
+# Check memory usage
+free -h
+docker stats
+
+# Restart services
+docker-compose restart
+```
+
+## Quick Command Reference
+
+```bash
+# Start services
+docker-compose up -d
+
+# Stop services
+docker-compose down
+
+# Restart services
+docker-compose restart
+
+# View logs
+docker-compose logs -f
+
+# Rebuild and restart
 docker-compose up -d --build
 
 # Check status
 docker-compose ps
+
+# Clean up
+docker system prune -a
 ```
 
-## Selective Service Rebuilds
+## Environment-Specific Notes
 
-Docker Compose is smart about rebuilds:
+### Development
+- Uses `docker-compose.yml`
+- Includes hot reload for backend
+- Exposes database on port 5432
 
-```bash
-# Rebuild only API (if backend code changed)
-docker-compose up -d --build api
-
-# Rebuild only frontend (if nginx config changed)
-docker-compose up -d --build frontend
-
-# Restart database (without rebuild)
-docker-compose restart db
-
-# View logs for specific service
-docker-compose logs -f api
-```
-
-## Directory Structure
-
-```
-App for Dad/                 # Repository root
-├── secrets/                 # Symlink to ../AppForDadSecrets/
-├── .env.example            # Example environment variables (checked in)
-├── docker-compose.yml      # References ./secrets/.env and ./secrets/*.pem
-├── setup-ec2.sh            # One-time setup script
-├── deploy-to-ec2.sh        # Regular deployment script
-├── backend/
-│   └── app/
-└── frontend/
-    └── dist/               # Built frontend (created by npm run build)
-
-../AppForDadSecrets/        # Outside repository (NOT checked in)
-├── .env                    # Database credentials
-├── Carl.pem                # SSH key for EC2
-├── carl2.pem               # SSL certificate
-└── carl3private.pem        # SSL private key
-
-EC2: ~/focus-tracker/       # Git repository clone
-├── secrets/                # Symlink to ~/secrets/
-├── backend/
-└── frontend/
-
-EC2: ~/secrets/             # Secrets directory
-├── .env
-├── carl2.pem
-└── carl3private.pem
-```
-
-## Troubleshooting
-
-### Containers won't start
-
-```bash
-# Check logs
-ssh -i ../AppForDadSecrets/Carl.pem ec2-user@107.21.171.155
-cd ~/focus-tracker
-docker-compose logs
-
-# Specific service
-docker-compose logs api
-```
-
-### Secrets not found
-
-```bash
-# Verify secrets exist on EC2
-ssh -i ../AppForDadSecrets/Carl.pem ec2-user@107.21.171.155
-ls -la ~/secrets/
-
-# Verify symlink
-ls -la ~/focus-tracker/secrets
-```
-
-### Frontend not building
-
-```bash
-# SSH to EC2 and build manually
-ssh -i ../AppForDadSecrets/Carl.pem ec2-user@107.21.171.155
-cd ~/focus-tracker/frontend
-npm install
-npm run build
-```
-
-### Permission denied errors
-
-```bash
-# Make sure you're in the docker group
-ssh -i ../AppForDadSecrets/Carl.pem ec2-user@107.21.171.155
-groups
-# Should include "docker"
-
-# If not, log out and back in, or run:
-newgrp docker
-```
-
-## Updating Secrets
-
-If you need to update secrets on EC2:
-
-```bash
-# Copy new .env
-scp -i ../AppForDadSecrets/Carl.pem ../AppForDadSecrets/.env ec2-user@107.21.171.155:~/secrets/
-
-# Copy new SSL certificates
-scp -i ../AppForDadSecrets/Carl.pem ../AppForDadSecrets/carl2.pem ec2-user@107.21.171.155:~/secrets/
-scp -i ../AppForDadSecrets/Carl.pem ../AppForDadSecrets/carl3private.pem ec2-user@107.21.171.155:~/secrets/
-
-# Restart containers to pick up changes
-ssh -i ../AppForDadSecrets/Carl.pem ec2-user@107.21.171.155 'cd ~/focus-tracker && docker-compose restart'
-```
-
-## Security Notes
-
-- ✅ Secrets are stored outside the repository
-- ✅ `.gitignore` excludes `*.pem` and `secrets/` directory
-- ✅ `.env` files are not checked into git
-- ✅ SSH key has restrictive permissions (600)
-- ✅ SSL certificates are only readable by owner in Docker
-
-## URLs
-
-- **Frontend**: https://tomato.alex-ware.com
-- **Backend API**: https://tomato.alex-ware.com/api
-- **EC2 Instance**: ec2-107-21-171-155.compute-1.amazonaws.com
+### Production
+- Uses `docker-compose.prod.yml`
+- Optimized for 1GB RAM
+- No hot reload
+- Database not exposed externally

@@ -12,35 +12,40 @@ import type {
   CategoryCreate,
   GraphData,
   TimeRange,
+  PasswordChangeRequest,
 } from '../types';
 
 // User/Auth Services
 export const authService = {
-  async register(data: RegisterData): Promise<User> {
-    return api.post<User>('/users/register', data);
+  async register(data: RegisterData): Promise<{ message: string }> {
+    return api.post<{ message: string }>('/users/register', data);
+  },
+
+  async verifyRegistration(email: string, code: string): Promise<User> {
+    return api.post<User>('/users/verify-registration', { email, code });
   },
 
   async login(credentials: LoginCredentials): Promise<User> {
     return api.post<User>('/users/login', credentials);
   },
 
-  async getUser(userid: string): Promise<User> {
-    return api.get<User>(`/users/${userid}`);
+  async getUser(email: string): Promise<User> {
+    return api.get<User>(`/users/${encodeURIComponent(email)}`);
   },
 
-  async deleteUser(userid: string): Promise<void> {
-    return api.delete<void>(`/users/${userid}`);
+  async deleteUser(email: string): Promise<void> {
+    return api.delete<void>(`/users/${encodeURIComponent(email)}`);
   },
 };
 
 // Focus Session Services
 export const focusSessionService = {
-  async createSession(userid: string, data: FocusSessionCreate): Promise<FocusSession> {
-    return api.post<FocusSession>(`/users/${userid}/focus-sessions`, data);
+  async createSession(email: string, data: FocusSessionCreate): Promise<FocusSession> {
+    return api.post<FocusSession>(`/users/${encodeURIComponent(email)}/focus-sessions`, data);
   },
 
   async getSessions(
-    userid: string,
+    email: string,
     params?: {
       skip?: number;
       limit?: number;
@@ -57,38 +62,38 @@ export const focusSessionService = {
     }
     const query = queryParams.toString();
     return api.get<FocusSession[]>(
-      `/users/${userid}/focus-sessions${query ? `?${query}` : ''}`
+      `/users/${encodeURIComponent(email)}/focus-sessions${query ? `?${query}` : ''}`
     );
   },
 
-  async deleteSession(userid: string, timestamp: string): Promise<void> {
-    return api.delete<void>(`/users/${userid}/focus-sessions/${encodeURIComponent(timestamp)}`);
+  async deleteSession(email: string, timestamp: string): Promise<void> {
+    return api.delete<void>(`/users/${encodeURIComponent(email)}/focus-sessions/${encodeURIComponent(timestamp)}`);
   },
 };
 
 // Focus Goal Services
 export const focusGoalService = {
-  async createGoal(userid: string, data: FocusGoalCreate): Promise<FocusGoal> {
-    return api.post<FocusGoal>(`/users/${userid}/focus-goals`, data);
+  async createGoal(email: string, data: FocusGoalCreate): Promise<FocusGoal> {
+    return api.post<FocusGoal>(`/users/${encodeURIComponent(email)}/focus-goals`, data);
   },
 
-  async getGoals(userid: string): Promise<FocusGoal[]> {
-    return api.get<FocusGoal[]>(`/users/${userid}/focus-goals`);
+  async getGoals(email: string): Promise<FocusGoal[]> {
+    return api.get<FocusGoal[]>(`/users/${encodeURIComponent(email)}/focus-goals`);
   },
 
-  async getGoal(userid: string, category: string): Promise<FocusGoal> {
-    return api.get<FocusGoal>(`/users/${userid}/focus-goals/${encodeURIComponent(category)}`);
+  async getGoal(email: string, category: string): Promise<FocusGoal> {
+    return api.get<FocusGoal>(`/users/${encodeURIComponent(email)}/focus-goals/${encodeURIComponent(category)}`);
   },
 
-  async deleteGoal(userid: string, category: string): Promise<void> {
-    return api.delete<void>(`/users/${userid}/focus-goals/${encodeURIComponent(category)}`);
+  async deleteGoal(email: string, category: string): Promise<void> {
+    return api.delete<void>(`/users/${encodeURIComponent(email)}/focus-goals/${encodeURIComponent(category)}`);
   },
 };
 
 // Stats Services
 export const statsService = {
   async getUserStats(
-    userid: string,
+    email: string,
     params?: {
       start_date?: string;
       end_date?: string;
@@ -102,37 +107,63 @@ export const statsService = {
     }
     const query = queryParams.toString();
     return api.get<UserStats>(
-      `/users/${userid}/stats${query ? `?${query}` : ''}`
+      `/users/${encodeURIComponent(email)}/stats${query ? `?${query}` : ''}`
     );
   },
 
-  async getWeeklyStats(userid: string): Promise<UserStats> {
-    return api.get<UserStats>(`/users/${userid}/stats/weekly`);
+  async getWeeklyStats(email: string): Promise<UserStats> {
+    return api.get<UserStats>(`/users/${encodeURIComponent(email)}/stats/weekly`);
   },
 };
 
 // Category Services
 export const categoryService = {
-  async createCategory(userid: string, data: CategoryCreate): Promise<Category> {
-    return api.post<Category>(`/users/${userid}/categories`, data);
+  async createCategory(email: string, data: CategoryCreate): Promise<Category> {
+    return api.post<Category>(`/users/${encodeURIComponent(email)}/categories`, data);
   },
 
-  async getCategories(userid: string): Promise<Category[]> {
-    return api.get<Category[]>(`/users/${userid}/categories`);
+  async getCategories(email: string): Promise<Category[]> {
+    return api.get<Category[]>(`/users/${encodeURIComponent(email)}/categories`);
   },
 
-  async deleteCategory(userid: string, category: string): Promise<void> {
-    return api.delete<void>(`/users/${userid}/categories/${encodeURIComponent(category)}`);
+  async deleteCategory(email: string, category: string): Promise<void> {
+    return api.delete<void>(`/users/${encodeURIComponent(email)}/categories/${encodeURIComponent(category)}`);
   },
 };
 
 // Graph Data Services
 export const graphService = {
-  async getGraphData(userid: string, timeRange: TimeRange, category?: string): Promise<GraphData> {
+  async getGraphData(email: string, timeRange: TimeRange, category?: string): Promise<GraphData> {
     const params = new URLSearchParams({ time_range: timeRange });
     if (category) {
       params.append('category', category);
     }
-    return api.get<GraphData>(`/users/${userid}/graph-data?${params.toString()}`);
+    return api.get<GraphData>(`/users/${encodeURIComponent(email)}/graph-data?${params.toString()}`);
+  },
+};
+
+// Verification Code Services (for passwordless login)
+export const verificationService = {
+  async requestCode(email: string): Promise<{ message: string }> {
+    return api.post<{ message: string }>('/users/request-verification-code', { email });
+  },
+
+  async loginWithCode(email: string, code: string): Promise<User> {
+    return api.post<User>('/users/login-with-code', { email, code });
+  },
+};
+
+// Account Management Services
+export const accountService = {
+  async changePassword(email: string, data: PasswordChangeRequest): Promise<{ message: string }> {
+    return api.post<{ message: string }>(`/users/${encodeURIComponent(email)}/change-password`, data);
+  },
+
+  async requestPasswordReset(email: string): Promise<{ message: string }> {
+    return api.post<{ message: string }>('/users/request-password-reset', { email });
+  },
+
+  async resetPassword(token: string, new_password: string): Promise<{ message: string }> {
+    return api.post<{ message: string }>('/users/reset-password', { token, new_password });
   },
 };
