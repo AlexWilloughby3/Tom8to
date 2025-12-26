@@ -33,9 +33,9 @@ describe('Integration Tests', () => {
 
   it('should complete full user registration and login flow', async () => {
     const user = userEvent.setup();
-    const mockUser = { email: 'newuser@example.com' };
+    const mockResponse = { message: 'Verification code sent to email. Please check your inbox.' };
 
-    vi.mocked(authService.register).mockResolvedValue(mockUser);
+    vi.mocked(authService.register).mockResolvedValue(mockResponse);
 
     render(
       <BrowserRouter>
