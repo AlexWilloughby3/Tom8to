@@ -25,6 +25,10 @@
   border-radius: 8px;
 }
 
+.card h2 {
+  margin-bottom: 1rem;
+}
+
 .goal-info {
   display: flex;
   flex-direction: column;
@@ -38,7 +42,7 @@
 }
 
 .goal-target {
-  color: #FF6347;
+  color: #c23838;
   font-weight: 500;
 }
 

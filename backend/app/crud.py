@@ -85,6 +85,14 @@ def create_focus_session(
     # Auto-create category if it doesn't exist
     category_obj = get_category(db, email, focus_session.category)
     if not category_obj:
+        # Check if user already has 20 categories
+        category_count = db.query(func.count(models.CategoryInformation.category)).filter(
+            models.CategoryInformation.email == email
+        ).scalar()
+
+        if category_count >= 20:
+            raise ValueError("Maximum of 20 categories per user reached")
+
         category_obj = models.CategoryInformation(
             email=email,
             category=focus_session.category
@@ -256,12 +264,20 @@ def get_user_stats(
 # ===== CATEGORY OPERATIONS =====
 
 def create_category(db: Session, email: str, category: schemas.CategoryCreate) -> models.CategoryInformation:
-    """Create a new category for a user"""
+    """Create a new category for a user (max 20 categories per user)"""
     db_category = get_category(db, email, category.category)
 
     if db_category:
         # Category already exists, just return it
         return db_category
+
+    # Check if user already has 20 categories
+    category_count = db.query(func.count(models.CategoryInformation.category)).filter(
+        models.CategoryInformation.email == email
+    ).scalar()
+
+    if category_count >= 20:
+        raise ValueError("Maximum of 20 categories per user reached")
 
     # Create new category
     db_category = models.CategoryInformation(

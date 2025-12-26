@@ -33,7 +33,7 @@ class UserWithSessions(User):
 
 # Focus session schemas
 class FocusSessionBase(BaseModel):
-    category: str = Field(..., min_length=1, max_length=255, description="Focus category (e.g., Work, Study)")
+    category: str = Field(..., min_length=1, max_length=50, description="Focus category (e.g., Work, Study)")
     focus_time_seconds: int = Field(..., ge=0, description="Focus time in seconds")
 
 
@@ -57,8 +57,8 @@ class FocusSession(FocusSessionBase):
 
 # Focus goal schemas
 class FocusGoalBase(BaseModel):
-    category: str = Field(..., min_length=1, max_length=255, description="Focus category")
-    goal_time_per_week_seconds: int = Field(..., ge=0, description="Weekly goal in seconds")
+    category: str = Field(..., min_length=1, max_length=50, description="Focus category")
+    goal_time_per_week_seconds: int = Field(..., ge=0, le=604800, description="Weekly goal in seconds (max 168 hours)")
 
 
 class FocusGoalCreate(FocusGoalBase):
@@ -66,7 +66,7 @@ class FocusGoalCreate(FocusGoalBase):
 
 
 class FocusGoalUpdate(BaseModel):
-    goal_time_per_week_seconds: int = Field(..., ge=0, description="New weekly goal in seconds")
+    goal_time_per_week_seconds: int = Field(..., ge=0, le=604800, description="New weekly goal in seconds (max 168 hours)")
 
 
 class FocusGoal(FocusGoalBase):
@@ -95,7 +95,7 @@ class UserStats(BaseModel):
 
 # Category schemas
 class CategoryBase(BaseModel):
-    category: str = Field(..., min_length=1, max_length=255, description="Category name")
+    category: str = Field(..., min_length=1, max_length=50, description="Category name")
 
 
 class CategoryCreate(CategoryBase):

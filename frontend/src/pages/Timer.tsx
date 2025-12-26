@@ -195,7 +195,7 @@ export default function Timer() {
           )}
         </div>
 
-        <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f9f9f9', borderRadius: '8px' }}>
+        <div className="timer-info-box">
           <strong>Total work time this session: </strong>
           {formatTime(totalWorkTime + (isBreak || pomodoroSeconds === 0 ? 0 : (getWorkDuration() * 60 - pomodoroSeconds)))}
         </div>
@@ -251,7 +251,7 @@ export default function Timer() {
         {stopwatchMessage && <div className="success">{stopwatchMessage}</div>}
         {stopwatchError && <div className="error">{stopwatchError}</div>}
 
-        <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f9f9f9', borderRadius: '8px' }}>
+        <div className="timer-info-box">
           <strong>Elapsed time: </strong>
           {formatTime(stopwatchSeconds)}
         </div>

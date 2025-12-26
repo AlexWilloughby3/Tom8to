@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePomodoro } from '../contexts/PomodoroContext';
 import { focusGoalService, categoryService } from '../api/services';
 import type { FocusGoal, Category } from '../types';
-import { hoursToSeconds, secondsToHours } from '../utils/formatters';
+import { secondsToHours } from '../utils/formatters';
 import './Goals.css';
 
 export default function Goals() {
@@ -12,7 +12,8 @@ export default function Goals() {
   const [goals, setGoals] = useState<FocusGoal[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [category, setCategory] = useState('');
-  const [hoursPerWeek, setHoursPerWeek] = useState('');
+  const [goalHours, setGoalHours] = useState('');
+  const [goalMinutes, setGoalMinutes] = useState('');
   const [newCategory, setNewCategory] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -56,21 +57,45 @@ export default function Goals() {
 
     if (!user) return;
 
-    const hours = parseFloat(hoursPerWeek);
-    if (isNaN(hours) || hours <= 0) {
-      setError('Please enter a valid number of hours');
+    const hours = parseInt(goalHours) || 0;
+    const minutes = parseInt(goalMinutes) || 0;
+
+    if (hours < 0 || hours > 168) {
+      setError('Hours must be between 0 and 168');
+      return;
+    }
+
+    if (minutes < 0 || minutes > 59) {
+      setError('Minutes must be between 0 and 59');
+      return;
+    }
+
+    if (hours === 0 && minutes === 0) {
+      setError('Please enter a goal greater than 0');
+      return;
+    }
+
+    const totalSeconds = hours * 3600 + minutes * 60;
+
+    if (totalSeconds > 604800) {
+      setError('Goal cannot exceed 168 hours per week');
       return;
     }
 
     try {
       await focusGoalService.createGoal(user.email, {
         category,
-        goal_time_per_week_seconds: hoursToSeconds(hours),
+        goal_time_per_week_seconds: totalSeconds,
       });
 
-      setMessage(`Goal set for ${category}: ${hours} hours per week`);
+      const displayHours = hours > 0 ? `${hours}h` : '';
+      const displayMinutes = minutes > 0 ? `${minutes}m` : '';
+      const displayTime = [displayHours, displayMinutes].filter(Boolean).join(' ');
+
+      setMessage(`Goal set for ${category}: ${displayTime} per week`);
       setCategory('');
-      setHoursPerWeek('');
+      setGoalHours('');
+      setGoalMinutes('');
       loadGoals();
     } catch (err) {
       setError('Failed to set goal. Please try again.');
@@ -156,6 +181,7 @@ export default function Goals() {
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value)}
                 placeholder="e.g., Programming, Art"
+                maxLength={50}
                 required
               />
             </div>
@@ -218,18 +244,33 @@ export default function Goals() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="hours">Hours per Week</label>
-              <input
-                id="hours"
-                type="number"
-                step="0.5"
-                min="0.5"
-                className="input"
-                value={hoursPerWeek}
-                onChange={(e) => setHoursPerWeek(e.target.value)}
-                placeholder="e.g., 10"
-                required
-              />
+              <label>Goal per Week</label>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <div style={{ flex: 1 }}>
+                  <input
+                    id="goalHours"
+                    type="number"
+                    min="0"
+                    max="168"
+                    className="input"
+                    value={goalHours}
+                    onChange={(e) => setGoalHours(e.target.value)}
+                    placeholder="Hours (0-168)"
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <input
+                    id="goalMinutes"
+                    type="number"
+                    min="0"
+                    max="59"
+                    className="input"
+                    value={goalMinutes}
+                    onChange={(e) => setGoalMinutes(e.target.value)}
+                    placeholder="Minutes (0-59)"
+                  />
+                </div>
+              </div>
             </div>
 
             {message && <div className="success">{message}</div>}

@@ -12,7 +12,7 @@
 .timer-display {
   font-size: 5rem;
   font-weight: bold;
-  color: #FF6347;
+  color: #c23838;
   margin: 2rem 0;
   font-variant-numeric: tabular-nums;
   font-family: 'Courier New', monospace;
@@ -28,7 +28,7 @@
 }
 
 .status-running {
-  color: #FF6347;
+  color: #c23838;
   font-weight: 600;
 }
 
@@ -98,4 +98,17 @@
 
 .number-input[type=number] {
   -moz-appearance: textfield;
+}
+
+.timer-info-box {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: #f9f9f9;
+  border-radius: 8px;
+}
+
+/* Dark mode styles */
+body.dark-mode .timer-info-box {
+  background: #1e1e1e;
+  color: #ffffff;
 }

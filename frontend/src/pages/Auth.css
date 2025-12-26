@@ -60,3 +60,32 @@
 .back-arrow:hover {
   color: #4CAF50;
 }
+
+/* Dark Mode Styles for Auth Pages */
+body.dark-mode .auth-container {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+}
+
+body.dark-mode .auth-card h1 {
+  color: #ffffff;
+}
+
+body.dark-mode .auth-subtitle {
+  color: #ffffff;
+}
+
+body.dark-mode .auth-footer {
+  color: #ffffff;
+}
+
+body.dark-mode .auth-footer a {
+  color: #ff6b6b;
+}
+
+body.dark-mode .back-arrow {
+  color: #ffffff;
+}
+
+body.dark-mode .back-arrow:hover {
+  color: #ff6b6b;
+}

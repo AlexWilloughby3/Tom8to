@@ -10,6 +10,10 @@
   margin-bottom: 2rem;
 }
 
+.category-progress {
+  margin-top: 1rem;
+}
+
 .stat-card {
   text-align: center;
 }
@@ -23,7 +27,7 @@
 .stat-value {
   font-size: 2.5rem;
   font-weight: bold;
-  color: #FF6347;
+  color: #c23838;
   margin-bottom: 0.5rem;
 }
 
@@ -81,7 +85,7 @@
 .session-duration {
   font-size: 1.2rem;
   font-weight: 600;
-  color: #FF6347;
+  color: #c23838;
 }
 
 .empty-state {
@@ -114,7 +118,7 @@
 }
 
 .progress-time {
-  color: #FF6347;
+  color: #c23838;
   font-weight: 500;
 }
 
@@ -131,7 +135,7 @@
 
 .progress-fill {
   height: 100%;
-  background: #FF6347;
+  background: #c23838;
   transition: width 0.3s ease;
 }
 

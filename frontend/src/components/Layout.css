@@ -23,7 +23,7 @@
 }
 
 .nav-brand h2 {
-  color: #FF6347;
+  color: #c23838;
   font-size: 1.5rem;
 }
 
@@ -67,7 +67,7 @@
   padding: 1rem 1.5rem;
   z-index: 1000;
   min-width: 150px;
-  border: 2px solid #FF6347;
+  border: 2px solid #c23838;
 }
 
 .floating-timer.break-mode {
@@ -90,7 +90,7 @@
 .floating-timer-time {
   font-size: 1.5rem;
   font-weight: bold;
-  color: #FF6347;
+  color: #c23838;
   font-family: 'Courier New', monospace;
 }
 

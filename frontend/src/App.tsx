@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PomodoroProvider } from './contexts/PomodoroContext'
@@ -18,6 +19,14 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  useEffect(() => {
+    // Initialize dark mode from localStorage on app load
+    const savedDarkMode = localStorage.getItem('darkMode');
+    if (savedDarkMode === 'true') {
+      document.body.classList.add('dark-mode');
+    }
+  }, []);
+
   return (
     <AuthProvider>
       <PomodoroProvider>

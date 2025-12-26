@@ -45,16 +45,16 @@ body {
 }
 
 .btn-primary {
-  background: #FF6347;
+  background: #c23838;
   color: white;
 }
 
 .btn-primary:hover {
-  background: #E5533D;
+  background: #a82f2f;
 }
 
 .btn-primary:disabled:hover {
-  background: #FF6347;
+  background: #c23838;
 }
 
 .btn-secondary {
@@ -83,6 +83,21 @@ body {
   background: #f44336;
 }
 
+.btn-delete {
+  background: none;
+  border: none;
+  color: #c23838;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  transition: background 0.2s;
+  border-radius: 4px;
+}
+
+.btn-delete:hover {
+  background: rgba(244, 67, 54, 0.1);
+}
+
 .card {
   background: white;
   border-radius: 12px;
@@ -102,7 +117,7 @@ body {
 
 .input:focus {
   outline: none;
-  border-color: #FF6347;
+  border-color: #c23838;
 }
 
 .form-group {

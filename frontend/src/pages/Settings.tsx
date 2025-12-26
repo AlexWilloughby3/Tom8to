@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { accountService, authService } from '../api/services';
+import './Settings.css';
 
 export default function Settings() {
   const { user, logout } = useAuth();
@@ -9,6 +10,23 @@ export default function Settings() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('darkMode');
+    return saved === 'true';
+  });
+
+  useEffect(() => {
+    if (darkMode) {
+      document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
+    }
+    localStorage.setItem('darkMode', darkMode.toString());
+  }, [darkMode]);
+
+  const handleToggleDarkMode = () => {
+    setDarkMode(!darkMode);
+  };
 
   const handleRequestPasswordReset = async () => {
     setError(null);
@@ -38,12 +56,30 @@ export default function Settings() {
   };
 
   return (
-    <div style={{ lineHeight: '2' }}>
+    <div className="settings-page">
       <h1>Settings</h1>
 
-      <section>
+      <section className="settings-section">
+        <h2>Appearance</h2>
+        <div className="settings-option">
+          <div className="settings-option-info">
+            <h3>Dark Mode</h3>
+            <p>Toggle dark mode for a comfortable viewing experience</p>
+          </div>
+          <label className="toggle-switch">
+            <input
+              type="checkbox"
+              checked={darkMode}
+              onChange={handleToggleDarkMode}
+            />
+            <span className="toggle-slider"></span>
+          </label>
+        </div>
+      </section>
+
+      <section className="settings-section">
         <h2>Reset Password</h2>
-        <p style={{ marginBottom: '0.5rem' }}>We'll send you an email with a link to reset your password.</p>
+        <p>We'll send you an email with a link to reset your password.</p>
         <button
           onClick={handleRequestPasswordReset}
           className="btn btn-primary"
@@ -53,10 +89,10 @@ export default function Settings() {
         </button>
       </section>
 
-      <section style={{ marginTop: '2rem' }}>
+      <section className="settings-section">
         <h2>Account</h2>
-        <p style={{ marginBottom: '0.5rem' }}>Delete your account permanently. This will remove all your data.</p>
-        <button onClick={handleDeleteAccount} className="btn btn-danger">Delete Account</button>
+        <p>Delete your account permanently. This will remove all your data.</p>
+        <button onClick={handleDeleteAccount} className="btn btn-primary">Delete Account</button>
       </section>
 
       {message && <div className="alert alert-success">{message}</div>}

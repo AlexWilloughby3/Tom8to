@@ -129,7 +129,10 @@ def create_focus_session(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return crud.create_focus_session(db=db, email=email, focus_session=focus_session)
+    try:
+        return crud.create_focus_session(db=db, email=email, focus_session=focus_session)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/api/users/{email}/focus-sessions/with-time", response_model=schemas.FocusSession, status_code=201)
@@ -147,12 +150,15 @@ def create_focus_session_with_time(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return crud.create_focus_session(
-        db=db,
-        email=email,
-        focus_session=focus_session,
-        time=focus_session.time
-    )
+    try:
+        return crud.create_focus_session(
+            db=db,
+            email=email,
+            focus_session=focus_session,
+            time=focus_session.time
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/api/users/{email}/focus-sessions", response_model=List[schemas.FocusSession])
@@ -303,7 +309,10 @@ def create_category(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return crud.create_category(db=db, email=email, category=category)
+    try:
+        return crud.create_category(db=db, email=email, category=category)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/api/users/{email}/categories", response_model=List[schemas.Category])
