@@ -19,12 +19,12 @@ from sqlalchemy.orm import sessionmaker
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
 
 from app import models
-from app.database import SQLALCHEMY_DATABASE_URL
+from app.database import DATABASE_URL
 
 
 def get_db_session():
     """Create a database session"""
-    engine = create_engine(SQLALCHEMY_DATABASE_URL)
+    engine = create_engine(DATABASE_URL)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     return SessionLocal()
 
