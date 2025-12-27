@@ -54,10 +54,15 @@ export interface FocusGoalCreate {
 export interface Category {
   email: string;
   category: string;
+  active: boolean;
 }
 
 export interface CategoryCreate {
   category: string;
+}
+
+export interface CategoryUpdate {
+  active: boolean;
 }
 
 export interface GraphDataPoint {

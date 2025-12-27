@@ -15,6 +15,16 @@ export default function Settings() {
     return saved === 'true';
   });
 
+  const [soundNotifications, setSoundNotifications] = useState(() => {
+    const saved = localStorage.getItem('soundNotifications');
+    return saved === 'true';
+  });
+
+  const [browserNotifications, setBrowserNotifications] = useState(() => {
+    const saved = localStorage.getItem('browserNotifications');
+    return saved === 'true';
+  });
+
   useEffect(() => {
     if (darkMode) {
       document.body.classList.add('dark-mode');
@@ -24,8 +34,38 @@ export default function Settings() {
     localStorage.setItem('darkMode', darkMode.toString());
   }, [darkMode]);
 
+  useEffect(() => {
+    localStorage.setItem('soundNotifications', soundNotifications.toString());
+  }, [soundNotifications]);
+
+  useEffect(() => {
+    localStorage.setItem('browserNotifications', browserNotifications.toString());
+  }, [browserNotifications]);
+
   const handleToggleDarkMode = () => {
     setDarkMode(!darkMode);
+  };
+
+  const handleToggleSoundNotifications = () => {
+    setSoundNotifications(!soundNotifications);
+  };
+
+  const handleToggleBrowserNotifications = async () => {
+    if (!browserNotifications) {
+      // Request permission when enabling
+      if ('Notification' in window) {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          setBrowserNotifications(true);
+        } else {
+          setError('Browser notification permission denied');
+        }
+      } else {
+        setError('Browser notifications not supported');
+      }
+    } else {
+      setBrowserNotifications(false);
+    }
   };
 
   const handleRequestPasswordReset = async () => {
@@ -71,6 +111,39 @@ export default function Settings() {
               type="checkbox"
               checked={darkMode}
               onChange={handleToggleDarkMode}
+            />
+            <span className="toggle-slider"></span>
+          </label>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h2>Notifications</h2>
+        <div className="settings-option">
+          <div className="settings-option-info">
+            <h3>Sound Notifications</h3>
+            <p>Play a sound when pomodoro timer transitions between work and break</p>
+          </div>
+          <label className="toggle-switch">
+            <input
+              type="checkbox"
+              checked={soundNotifications}
+              onChange={handleToggleSoundNotifications}
+            />
+            <span className="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div className="settings-option">
+          <div className="settings-option-info">
+            <h3>Browser Notifications</h3>
+            <p>Show desktop notifications when pomodoro timer completes or transitions</p>
+          </div>
+          <label className="toggle-switch">
+            <input
+              type="checkbox"
+              checked={browserNotifications}
+              onChange={handleToggleBrowserNotifications}
             />
             <span className="toggle-slider"></span>
           </label>

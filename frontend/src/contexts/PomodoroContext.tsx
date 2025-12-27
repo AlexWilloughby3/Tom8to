@@ -2,6 +2,13 @@ import { createContext, useContext, useState, useEffect, useRef, ReactNode } fro
 import { useAuth } from './AuthContext';
 import { focusSessionService, categoryService } from '../api/services';
 import type { Category } from '../types';
+import {
+  playNotificationSound,
+  playCompletionSound,
+  notifyWorkPeriodComplete,
+  notifyBreakPeriodComplete,
+  notifyAllCyclesComplete
+} from '../utils/soundNotifications';
 
 interface PomodoroContextType {
   categories: Category[];
@@ -152,11 +159,16 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
     if (isBreak) {
       // Break finished, start next work cycle or finish
       if (currentCycle < getCycles()) {
+        // Transitioning from break to work
+        playNotificationSound();
+        notifyBreakPeriodComplete();
         setCurrentCycle(currentCycle + 1);
         setIsBreak(false);
         setPomodoroSeconds(getWorkDuration() * 60);
       } else {
         // All cycles complete, save session
+        playCompletionSound();
+        notifyAllCyclesComplete();
         handlePomodoroSave();
       }
     } else {
@@ -164,11 +176,15 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
       setTotalWorkTime(totalWorkTime + getWorkDuration() * 60);
 
       if (currentCycle < getCycles()) {
-        // Start break
+        // Start break - transitioning from work to break
+        playNotificationSound();
+        notifyWorkPeriodComplete();
         setIsBreak(true);
         setPomodoroSeconds(getBreakDuration() * 60);
       } else {
         // Last cycle done, save
+        playCompletionSound();
+        notifyAllCyclesComplete();
         handlePomodoroSave();
       }
     }

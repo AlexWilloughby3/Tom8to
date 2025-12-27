@@ -104,9 +104,14 @@ class CategoryCreate(CategoryBase):
 
 class Category(CategoryBase):
     email: str
+    active: bool = True
 
     class Config:
         from_attributes = True
+
+
+class CategoryUpdate(BaseModel):
+    active: bool = Field(..., description="Whether the category is active")
 
 
 # Graph data schemas

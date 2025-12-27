@@ -326,6 +326,25 @@ def get_categories(email: str, db: Session = Depends(get_db)):
     return crud.get_categories(db=db, email=email)
 
 
+@app.patch("/api/users/{email}/categories/{category}", response_model=schemas.Category)
+def update_category(
+    email: str,
+    category: str,
+    category_update: schemas.CategoryUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update a category (e.g., toggle active status)"""
+    # Verify user exists
+    user = crud.get_user(db, email=email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    updated_category = crud.update_category(db, email=email, category=category, active=category_update.active)
+    if not updated_category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return updated_category
+
+
 @app.delete("/api/users/{email}/categories/{category}", status_code=204)
 def delete_category(email: str, category: str, db: Session = Depends(get_db)):
     """Delete a category"""

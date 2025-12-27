@@ -10,6 +10,7 @@ import type {
   UserStats,
   Category,
   CategoryCreate,
+  CategoryUpdate,
   GraphData,
   TimeRange,
   PasswordChangeRequest,
@@ -124,6 +125,10 @@ export const categoryService = {
 
   async getCategories(email: string): Promise<Category[]> {
     return api.get<Category[]>(`/users/${encodeURIComponent(email)}/categories`);
+  },
+
+  async updateCategory(email: string, category: string, data: CategoryUpdate): Promise<Category> {
+    return api.patch<Category>(`/users/${encodeURIComponent(email)}/categories/${encodeURIComponent(category)}`, data);
   },
 
   async deleteCategory(email: string, category: string): Promise<void> {

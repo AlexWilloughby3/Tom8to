@@ -144,6 +144,29 @@ export default function Goals() {
     }
   };
 
+  const handleToggleCategory = async (cat: Category) => {
+    if (!user) return;
+
+    try {
+      await categoryService.updateCategory(user.email, cat.category, {
+        active: !cat.active,
+      });
+
+      // Update local state
+      setCategories((prev) =>
+        prev.map((c) =>
+          c.category === cat.category ? { ...c, active: !c.active } : c
+        )
+      );
+
+      const status = !cat.active ? 'activated' : 'deactivated';
+      setCategoryMessage(`Category "${cat.category}" ${status}`);
+    } catch (error) {
+      setCategoryError('Failed to update category');
+      console.error(error);
+    }
+  };
+
   const handleDeleteCategory = async (cat: Category) => {
     if (!user) return;
     if (!confirm(`Delete category "${cat.category}"?`)) return;
@@ -205,14 +228,27 @@ export default function Goals() {
                 <div key={cat.category} className="goal-item">
                   <div className="goal-info">
                     <span className="goal-category">{cat.category}</span>
+                    <span className="goal-target" style={{ fontSize: '0.85rem', opacity: 0.8 }}>
+                      {cat.active ? 'Active' : 'Inactive'}
+                    </span>
                   </div>
-                  <button
-                    className="btn-delete"
-                    onClick={() => handleDeleteCategory(cat)}
-                    title="Delete category"
-                  >
-                    ×
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <label className="toggle-switch" title="Toggle active status">
+                      <input
+                        type="checkbox"
+                        checked={cat.active}
+                        onChange={() => handleToggleCategory(cat)}
+                      />
+                      <span className="toggle-slider"></span>
+                    </label>
+                    <button
+                      className="btn-delete"
+                      onClick={() => handleDeleteCategory(cat)}
+                      title="Delete category"
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

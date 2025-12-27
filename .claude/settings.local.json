@@ -26,7 +26,10 @@
       "Bash(docker-compose up:*)",
       "Bash(docker-compose restart:*)",
       "Bash(grep:*)",
-      "Bash(docker-compose ps:*)"
+      "Bash(docker-compose ps:*)",
+      "Bash(npm run dev:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(docker exec:*)"
     ]
   }
 }

@@ -107,8 +107,17 @@
   border-radius: 8px;
 }
 
+.manual-entry-description {
+  margin-bottom: 1.5rem;
+  color: #666;
+}
+
 /* Dark mode styles */
 body.dark-mode .timer-info-box {
   background: #1e1e1e;
+  color: #ffffff;
+}
+
+body.dark-mode .manual-entry-description {
   color: #ffffff;
 }

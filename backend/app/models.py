@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -48,6 +48,7 @@ class CategoryInformation(Base):
 
     email = Column(String(255), ForeignKey("user_information.email"), primary_key=True, nullable=False)
     category = Column(String(255), primary_key=True, nullable=False)
+    active = Column(Boolean, nullable=False, default=True)
 
     # Relationship to user
     user = relationship("UserInformation", back_populates="categories")

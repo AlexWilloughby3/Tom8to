@@ -48,6 +48,12 @@ cd ~/App-for-Dad/backend
 # Install Python dependencies
 pip3 install -r requirements.txt
 
+# Copy admin.py into the running container (if not already there)
+docker cp backend/admin.py fastapi_app:/app/
+
+# Run admin.py inside the container
+docker exec -it fastapi_app python admin.py
+
 # Run admin.py
 python3 admin.py
 ```

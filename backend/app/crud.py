@@ -209,7 +209,14 @@ def get_user_stats(
     end_date: Optional[datetime] = None
 ) -> schemas.UserStats:
     """Get statistics for a user"""
-    # Build base query
+    # Get active categories
+    active_categories = db.query(models.CategoryInformation).filter(
+        models.CategoryInformation.email == email,
+        models.CategoryInformation.active == True
+    ).all()
+    active_category_names = {cat.category for cat in active_categories}
+
+    # Build base query for time logged
     query = db.query(
         models.FocusInformation.category,
         func.sum(models.FocusInformation.focus_time_seconds).label('total_time'),
@@ -226,32 +233,64 @@ def get_user_stats(
     # Group by category
     category_stats = query.group_by(models.FocusInformation.category).all()
 
-    # Get goals
-    goals = {goal.category: goal.goal_time_per_week_seconds for goal in get_focus_goals(db, email)}
+    # Get goals for active categories only
+    all_goals = get_focus_goals(db, email)
+    goals = {goal.category: goal.goal_time_per_week_seconds
+             for goal in all_goals if goal.category in active_category_names}
 
-    # Build response
+    # Build time stats dict
+    time_stats = {}
+    for cat_stat in category_stats:
+        category, total_cat_time, session_count, avg_time = cat_stat
+        if category in active_category_names:  # Only include active categories
+            time_stats[category] = {
+                'total_time': total_cat_time or 0,
+                'session_count': session_count or 0,
+                'avg_time': avg_time or 0
+            }
+
+    # Build response - include ALL goals, even if no time logged
     categories = []
     total_time = 0
     total_sessions = 0
 
-    for cat_stat in category_stats:
-        category, total_cat_time, session_count, avg_time = cat_stat
-        total_time += total_cat_time or 0
-        total_sessions += session_count or 0
+    # First, add all categories with goals (even if 0 time)
+    for category, goal_time in goals.items():
+        stats = time_stats.get(category, {'total_time': 0, 'session_count': 0, 'avg_time': 0})
+        total_cat_time = stats['total_time']
+        session_count = stats['session_count']
+        avg_time = stats['avg_time']
 
-        goal_time = goals.get(category)
+        total_time += total_cat_time
+        total_sessions += session_count
+
         progress = None
         if goal_time and goal_time > 0:
             progress = (total_cat_time / goal_time) * 100
 
         categories.append(schemas.CategoryStats(
             category=category,
-            total_time_seconds=total_cat_time or 0,
-            session_count=session_count or 0,
-            average_time_seconds=avg_time or 0,
+            total_time_seconds=total_cat_time,
+            session_count=session_count,
+            average_time_seconds=avg_time,
             goal_time_per_week_seconds=goal_time,
             progress_percentage=progress
         ))
+
+    # Then add categories with time but no goal (if any)
+    for category, stats in time_stats.items():
+        if category not in goals:
+            total_time += stats['total_time']
+            total_sessions += stats['session_count']
+
+            categories.append(schemas.CategoryStats(
+                category=category,
+                total_time_seconds=stats['total_time'],
+                session_count=stats['session_count'],
+                average_time_seconds=stats['avg_time'],
+                goal_time_per_week_seconds=None,
+                progress_percentage=None
+            ))
 
     return schemas.UserStats(
         email=email,
@@ -303,6 +342,17 @@ def get_categories(db: Session, email: str) -> List[models.CategoryInformation]:
     return db.query(models.CategoryInformation).filter(
         models.CategoryInformation.email == email
     ).order_by(models.CategoryInformation.category).all()
+
+
+def update_category(db: Session, email: str, category: str, active: bool) -> Optional[models.CategoryInformation]:
+    """Update a category's active status"""
+    db_category = get_category(db, email, category)
+    if db_category:
+        db_category.active = active
+        db.commit()
+        db.refresh(db_category)
+        return db_category
+    return None
 
 
 def delete_category(db: Session, email: str, category: str) -> bool:

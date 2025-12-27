@@ -36,9 +36,21 @@ CREATE TABLE IF NOT EXISTS focus_goal_information (
 CREATE TABLE IF NOT EXISTS category_information (
     email VARCHAR(255) NOT NULL,
     category VARCHAR(255) NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
     PRIMARY KEY (email, category),
     FOREIGN KEY (email) REFERENCES user_information(email) ON DELETE CASCADE
 );
+
+-- Migration: Add active column if it doesn't exist (for existing databases)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'category_information' AND column_name = 'active'
+    ) THEN
+        ALTER TABLE category_information ADD COLUMN active BOOLEAN NOT NULL DEFAULT TRUE;
+    END IF;
+END $$;
 
 -- Table 5: Verification codes for passwordless login
 CREATE TABLE IF NOT EXISTS verification_codes (
