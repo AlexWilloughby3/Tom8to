@@ -52,8 +52,8 @@ services:
       - ./frontend/dist:/usr/share/nginx/html
       - ./nginx.conf:/etc/nginx/conf.d/default.conf
       # Mount Cloudflare origin certificate and private key from secrets directory
-      - ./secrets/carl2.pem:/etc/ssl/certs/fullchain.pem:ro
-      - ./secrets/carl3private.pem:/etc/ssl/private/privkey.pem:ro
+      - ../secrets/carl2.pem:/etc/ssl/certs/fullchain.pem:ro
+      - ../secrets/carl3private.pem:/etc/ssl/private/privkey.pem:ro
     depends_on:
       - api
 
