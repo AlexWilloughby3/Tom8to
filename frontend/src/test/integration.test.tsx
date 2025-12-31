@@ -60,7 +60,7 @@ describe('Integration Tests', () => {
 
   it('should handle authentication flow', async () => {
     const user = userEvent.setup();
-    const mockUser = { email: 'testuser@example.com' };
+    const mockUser = { email: 'testuser@example.com', show_on_leaderboard: true };
 
     vi.mocked(authService.login).mockResolvedValue(mockUser);
     vi.mocked(focusSessionService.getSessions).mockResolvedValue([]);

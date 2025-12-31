@@ -50,7 +50,7 @@ describe('Login Component', () => {
 
   it('should handle successful login', async () => {
     const user = userEvent.setup();
-    const mockUser = { email: 'testuser@example.com' };
+    const mockUser = { email: 'testuser@example.com', show_on_leaderboard: true };
 
     vi.mocked(authService.login).mockResolvedValue(mockUser);
 
