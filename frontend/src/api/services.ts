@@ -1,6 +1,7 @@
 import { api } from './client';
 import type {
   User,
+  UserUpdate,
   LoginCredentials,
   RegisterData,
   FocusSession,
@@ -14,6 +15,7 @@ import type {
   GraphData,
   TimeRange,
   PasswordChangeRequest,
+  LeaderboardEntry,
 } from '../types';
 
 // User/Auth Services
@@ -36,6 +38,10 @@ export const authService = {
 
   async deleteUser(email: string): Promise<void> {
     return api.delete<void>(`/users/${encodeURIComponent(email)}`);
+  },
+
+  async updateUser(email: string, data: UserUpdate): Promise<User> {
+    return api.patch<User>(`/users/${encodeURIComponent(email)}`, data);
   },
 };
 
@@ -170,5 +176,12 @@ export const accountService = {
 
   async resetPassword(token: string, new_password: string): Promise<{ message: string }> {
     return api.post<{ message: string }>('/users/reset-password', { token, new_password });
+  },
+};
+
+// Leaderboard Services
+export const leaderboardService = {
+  async getLeaderboard(): Promise<LeaderboardEntry[]> {
+    return api.get<LeaderboardEntry[]>('/leaderboard');
   },
 };

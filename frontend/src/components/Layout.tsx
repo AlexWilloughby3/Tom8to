@@ -66,6 +66,7 @@ export default function Layout() {
               <Link to="/" className="nav-link">Dashboard</Link>
               <Link to="/timer" className="nav-link">Timer</Link>
               <Link to="/goals" className="nav-link">Goals</Link>
+              <Link to="/leaderboard" className="nav-link">Leaderboard</Link>
               <Link to="/settings" className="nav-link">Settings</Link>
               <button onClick={handleLogout} className="btn btn-secondary">Logout</button>
             </div>

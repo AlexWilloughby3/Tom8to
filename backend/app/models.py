@@ -10,6 +10,7 @@ class UserInformation(Base):
 
     email = Column(String(255), primary_key=True, index=True)
     password = Column(String(255), nullable=False)
+    show_on_leaderboard = Column(Boolean, nullable=False, default=True)
 
     # Relationships
     focus_sessions = relationship("FocusInformation", back_populates="user", cascade="all, delete-orphan")

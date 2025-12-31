@@ -111,6 +111,19 @@ def delete_user(email: str, db: Session = Depends(get_db)):
     return None
 
 
+@app.patch("/api/users/{email}", response_model=schemas.User)
+def update_user(
+    email: str,
+    user_update: schemas.UserUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update user settings"""
+    updated_user = crud.update_user(db, email=email, user_update=user_update)
+    if not updated_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return updated_user
+
+
 # ===== FOCUS SESSION ENDPOINTS =====
 
 @app.post("/api/users/{email}/focus-sessions", response_model=schemas.FocusSession, status_code=201)
@@ -474,3 +487,11 @@ def reset_password(request: schemas.PasswordReset, db: Session = Depends(get_db)
         raise HTTPException(status_code=401, detail="Invalid or expired reset token")
 
     return {"message": "Password reset successfully"}
+
+
+# ===== LEADERBOARD ENDPOINTS =====
+
+@app.get("/api/leaderboard", response_model=List[schemas.LeaderboardEntry])
+def get_leaderboard(db: Session = Depends(get_db)):
+    """Get leaderboard data for all users who have opted in"""
+    return crud.get_leaderboard_data(db=db)

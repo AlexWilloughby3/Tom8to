@@ -5,7 +5,7 @@ import { accountService, authService } from '../api/services';
 import './Settings.css';
 
 export default function Settings() {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const navigate = useNavigate();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +25,10 @@ export default function Settings() {
     return saved === 'true';
   });
 
+  const [showOnLeaderboard, setShowOnLeaderboard] = useState(() => {
+    return user?.show_on_leaderboard ?? true;
+  });
+
   useEffect(() => {
     if (darkMode) {
       document.body.classList.add('dark-mode');
@@ -41,6 +45,13 @@ export default function Settings() {
   useEffect(() => {
     localStorage.setItem('browserNotifications', browserNotifications.toString());
   }, [browserNotifications]);
+
+  useEffect(() => {
+    // Sync showOnLeaderboard with user state when user changes
+    if (user) {
+      setShowOnLeaderboard(user.show_on_leaderboard);
+    }
+  }, [user]);
 
   const handleToggleDarkMode = () => {
     setDarkMode(!darkMode);
@@ -65,6 +76,22 @@ export default function Settings() {
       }
     } else {
       setBrowserNotifications(false);
+    }
+  };
+
+  const handleToggleLeaderboard = async () => {
+    if (!user) return;
+
+    try {
+      const newValue = !showOnLeaderboard;
+      const updatedUser = await authService.updateUser(user.email, { show_on_leaderboard: newValue });
+      setShowOnLeaderboard(newValue);
+      updateUser(updatedUser); // Update AuthContext and localStorage
+      setMessage(newValue ? 'You will now appear on the leaderboard' : 'You have been removed from the leaderboard');
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to update leaderboard setting');
+      setTimeout(() => setError(null), 3000);
     }
   };
 
@@ -144,6 +171,24 @@ export default function Settings() {
               type="checkbox"
               checked={browserNotifications}
               onChange={handleToggleBrowserNotifications}
+            />
+            <span className="toggle-slider"></span>
+          </label>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h2>Privacy</h2>
+        <div className="settings-option">
+          <div className="settings-option-info">
+            <h3>Show on Leaderboard</h3>
+            <p>Display your stats on the public leaderboard for all users to see</p>
+          </div>
+          <label className="toggle-switch">
+            <input
+              type="checkbox"
+              checked={showOnLeaderboard}
+              onChange={handleToggleLeaderboard}
             />
             <span className="toggle-slider"></span>
           </label>

@@ -1,5 +1,10 @@
 export interface User {
   email: string;
+  show_on_leaderboard: boolean;
+}
+
+export interface UserUpdate {
+  show_on_leaderboard: boolean;
 }
 
 export interface FocusSession {
@@ -91,4 +96,14 @@ export interface VerificationCodeLogin {
 export interface PasswordChangeRequest {
   current_password: string;
   new_password: string;
+}
+
+// Leaderboard types
+export interface LeaderboardEntry {
+  email: string;
+  focus_hours_this_week: number;
+  focus_hours_all_time: number;
+  goals_completed_this_week: number;
+  total_goals_this_week: number;
+  goals_completed_all_time: number;
 }

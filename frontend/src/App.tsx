@@ -10,6 +10,7 @@ import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
 import Timer from './pages/Timer'
 import Goals from './pages/Goals'
+import Leaderboard from './pages/Leaderboard'
 import Settings from './pages/Settings'
 import Layout from './components/Layout'
 
@@ -46,6 +47,7 @@ function App() {
               <Route index element={<Dashboard />} />
               <Route path="timer" element={<Timer />} />
               <Route path="goals" element={<Goals />} />
+              <Route path="leaderboard" element={<Leaderboard />} />
               <Route path="settings" element={<Settings />} />
             </Route>
           </Routes>

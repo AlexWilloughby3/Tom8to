@@ -70,6 +70,17 @@ def delete_user(db: Session, email: str) -> bool:
     return False
 
 
+def update_user(db: Session, email: str, user_update: schemas.UserUpdate) -> Optional[models.UserInformation]:
+    """Update user settings"""
+    db_user = get_user(db, email)
+    if db_user:
+        db_user.show_on_leaderboard = user_update.show_on_leaderboard
+        db.commit()
+        db.refresh(db_user)
+        return db_user
+    return None
+
+
 # ===== FOCUS SESSION OPERATIONS =====
 
 def create_focus_session(
@@ -652,3 +663,118 @@ def verify_registration_code(db: Session, email: str, code: str) -> bool:
     db.commit()
 
     return True
+
+
+# ===== LEADERBOARD OPERATIONS =====
+
+def get_leaderboard_data(db: Session) -> List[schemas.LeaderboardEntry]:
+    """Get leaderboard data for all users who have opted in"""
+    from datetime import datetime, timedelta
+
+    # Get all users who have opted in to leaderboard
+    users = db.query(models.UserInformation).filter(
+        models.UserInformation.show_on_leaderboard == True
+    ).all()
+
+    leaderboard = []
+
+    # Calculate start of current week (Monday)
+    today = datetime.utcnow()
+    week_start = today - timedelta(days=today.weekday())
+    week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    for user in users:
+        email = user.email
+
+        # Get focus hours this week
+        week_sessions = db.query(
+            func.sum(models.FocusInformation.focus_time_seconds)
+        ).filter(
+            models.FocusInformation.email == email,
+            models.FocusInformation.time >= week_start
+        ).scalar() or 0
+
+        focus_hours_this_week = week_sessions / 3600.0
+
+        # Get focus hours all time
+        all_time_sessions = db.query(
+            func.sum(models.FocusInformation.focus_time_seconds)
+        ).filter(
+            models.FocusInformation.email == email
+        ).scalar() or 0
+
+        focus_hours_all_time = all_time_sessions / 3600.0
+
+        # Get goals this week
+        active_categories = db.query(models.CategoryInformation).filter(
+            models.CategoryInformation.email == email,
+            models.CategoryInformation.active == True
+        ).all()
+        active_category_names = {cat.category for cat in active_categories}
+
+        # Get all goals for active categories
+        goals = db.query(models.FocusGoalInformation).filter(
+            models.FocusGoalInformation.email == email
+        ).all()
+
+        goals_this_week = [g for g in goals if g.category in active_category_names]
+        total_goals_this_week = len(goals_this_week)
+
+        # Calculate goals completed this week
+        goals_completed_this_week = 0
+        for goal in goals_this_week:
+            time_logged = db.query(
+                func.sum(models.FocusInformation.focus_time_seconds)
+            ).filter(
+                models.FocusInformation.email == email,
+                models.FocusInformation.category == goal.category,
+                models.FocusInformation.time >= week_start
+            ).scalar() or 0
+
+            if time_logged >= goal.goal_time_per_week_seconds:
+                goals_completed_this_week += 1
+
+        # Calculate goals completed all time (simplified - based on last completed week)
+        # We'll count how many goals were completed in their best week
+        goals_completed_all_time = 0
+
+        # Get all historical goals (not just active ones)
+        all_goals = db.query(models.FocusGoalInformation).filter(
+            models.FocusGoalInformation.email == email
+        ).all()
+
+        # For each goal, check if it was ever completed in any week
+        for goal in all_goals:
+            # Get all sessions for this category
+            sessions = db.query(models.FocusInformation).filter(
+                models.FocusInformation.email == email,
+                models.FocusInformation.category == goal.category
+            ).all()
+
+            # Group by week and check if goal was met in any week
+            weekly_totals = {}
+            for session in sessions:
+                week_key = (session.time - timedelta(days=session.time.weekday())).date()
+                if week_key not in weekly_totals:
+                    weekly_totals[week_key] = 0
+                weekly_totals[week_key] += session.focus_time_seconds
+
+            # Check if goal was met in any week
+            for week_total in weekly_totals.values():
+                if week_total >= goal.goal_time_per_week_seconds:
+                    goals_completed_all_time += 1
+                    break  # Count this goal once
+
+        leaderboard.append(schemas.LeaderboardEntry(
+            email=email,
+            focus_hours_this_week=round(focus_hours_this_week, 2),
+            focus_hours_all_time=round(focus_hours_all_time, 2),
+            goals_completed_this_week=goals_completed_this_week,
+            total_goals_this_week=total_goals_this_week,
+            goals_completed_all_time=goals_completed_all_time
+        ))
+
+    # Sort by focus hours this week (descending)
+    leaderboard.sort(key=lambda x: x.focus_hours_this_week, reverse=True)
+
+    return leaderboard

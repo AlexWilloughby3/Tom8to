@@ -19,9 +19,15 @@ class UserLogin(BaseModel):
 
 class User(UserBase):
     """User response model (without password)"""
+    show_on_leaderboard: bool = True
 
     class Config:
         from_attributes = True
+
+
+class UserUpdate(BaseModel):
+    """Update user settings"""
+    show_on_leaderboard: bool = Field(..., description="Whether to show user on leaderboard")
 
 
 class UserWithSessions(User):
@@ -153,3 +159,13 @@ class PasswordReset(BaseModel):
 class RegistrationVerification(BaseModel):
     email: EmailStr
     code: str = Field(..., min_length=6, max_length=6, description="6-digit verification code")
+
+
+# Leaderboard schemas
+class LeaderboardEntry(BaseModel):
+    email: str
+    focus_hours_this_week: float
+    focus_hours_all_time: float
+    goals_completed_this_week: int
+    total_goals_this_week: int
+    goals_completed_all_time: int

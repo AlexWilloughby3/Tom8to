@@ -10,7 +10,8 @@
 -- Table 1: User information
 CREATE TABLE IF NOT EXISTS user_information (
     email VARCHAR(255) PRIMARY KEY,
-    password VARCHAR(255) NOT NULL
+    password VARCHAR(255) NOT NULL,
+    show_on_leaderboard BOOLEAN NOT NULL DEFAULT TRUE
 );
 
 -- Table 2: Focus information
@@ -49,6 +50,17 @@ BEGIN
         WHERE table_name = 'category_information' AND column_name = 'active'
     ) THEN
         ALTER TABLE category_information ADD COLUMN active BOOLEAN NOT NULL DEFAULT TRUE;
+    END IF;
+END $$;
+
+-- Migration: Add show_on_leaderboard column if it doesn't exist (for existing databases)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'user_information' AND column_name = 'show_on_leaderboard'
+    ) THEN
+        ALTER TABLE user_information ADD COLUMN show_on_leaderboard BOOLEAN NOT NULL DEFAULT TRUE;
     END IF;
 END $$;
 
