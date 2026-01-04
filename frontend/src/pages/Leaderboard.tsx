@@ -50,7 +50,9 @@ export default function Leaderboard() {
                   <th className="email-col">User</th>
                   <th className="stat-col">Hours This Week</th>
                   <th className="stat-col">Total Hours</th>
-                  <th className="stat-col">Goals (Week)</th>
+                  <th className="stat-col">Time Goals (Week)</th>
+                  <th className="stat-col">Daily Goals (Week)</th>
+                  <th className="stat-col">Weekly Goals</th>
                   <th className="stat-col">Goals (All Time)</th>
                 </tr>
               </thead>
@@ -70,6 +72,12 @@ export default function Leaderboard() {
                     <td className="stat-col">{entry.focus_hours_all_time.toFixed(1)}h</td>
                     <td className="stat-col">
                       {entry.goals_completed_this_week}/{entry.total_goals_this_week}
+                    </td>
+                    <td className="stat-col">
+                      {entry.daily_goals_completed_this_week}/{entry.total_daily_goals_this_week}
+                    </td>
+                    <td className="stat-col">
+                      {entry.weekly_goals_completed_this_week}/{entry.total_weekly_goals_this_week}
                     </td>
                     <td className="stat-col">{entry.goals_completed_all_time}</td>
                   </tr>

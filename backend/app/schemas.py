@@ -1,6 +1,14 @@
 from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 from datetime import datetime
+from enum import Enum
+
+
+# Goal type enum
+class GoalType(str, Enum):
+    TIME_BASED = "TIME_BASED"
+    DAILY_CHECKBOX = "DAILY_CHECKBOX"
+    WEEKLY_CHECKBOX = "WEEKLY_CHECKBOX"
 
 
 # User schemas
@@ -64,7 +72,9 @@ class FocusSession(FocusSessionBase):
 # Focus goal schemas
 class FocusGoalBase(BaseModel):
     category: str = Field(..., min_length=1, max_length=50, description="Focus category")
-    goal_time_per_week_seconds: int = Field(..., ge=0, le=604800, description="Weekly goal in seconds (max 168 hours)")
+    goal_type: GoalType = Field(..., description="Goal type: TIME_BASED, DAILY_CHECKBOX, or WEEKLY_CHECKBOX")
+    goal_time_per_week_seconds: Optional[int] = Field(None, ge=0, le=604800, description="Weekly goal in seconds (max 168 hours, only for TIME_BASED)")
+    description: Optional[str] = Field(None, max_length=255, description="Description for checkbox goals")
 
 
 class FocusGoalCreate(FocusGoalBase):
@@ -72,7 +82,8 @@ class FocusGoalCreate(FocusGoalBase):
 
 
 class FocusGoalUpdate(BaseModel):
-    goal_time_per_week_seconds: int = Field(..., ge=0, le=604800, description="New weekly goal in seconds (max 168 hours)")
+    goal_time_per_week_seconds: Optional[int] = Field(None, ge=0, le=604800, description="New weekly goal in seconds (max 168 hours)")
+    description: Optional[str] = Field(None, max_length=255, description="New description")
 
 
 class FocusGoal(FocusGoalBase):
@@ -90,6 +101,8 @@ class CategoryStats(BaseModel):
     average_time_seconds: float
     goal_time_per_week_seconds: Optional[int] = None
     progress_percentage: Optional[float] = None
+    daily_checkbox_goals: List[Dict[str, Any]] = []
+    weekly_checkbox_goals: List[Dict[str, Any]] = []
 
 
 class UserStats(BaseModel):
@@ -207,6 +220,27 @@ class RegistrationVerification(BaseModel):
     code: str = Field(..., min_length=6, max_length=6, description="6-digit verification code")
 
 
+# Checkbox completion schemas
+class CheckboxCompletionBase(BaseModel):
+    category: str
+    goal_type: GoalType
+    completion_date: datetime
+    completed: bool
+
+
+class CheckboxCompletionCreate(BaseModel):
+    category: str
+    goal_type: GoalType
+
+
+class CheckboxCompletion(CheckboxCompletionBase):
+    email: str
+    completed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 # Leaderboard schemas
 class LeaderboardEntry(BaseModel):
     email: str
@@ -215,3 +249,7 @@ class LeaderboardEntry(BaseModel):
     goals_completed_this_week: int
     total_goals_this_week: int
     goals_completed_all_time: int
+    daily_goals_completed_this_week: int = 0
+    total_daily_goals_this_week: int = 0
+    weekly_goals_completed_this_week: int = 0
+    total_weekly_goals_this_week: int = 0

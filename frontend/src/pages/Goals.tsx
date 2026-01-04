@@ -2,7 +2,7 @@ import { useEffect, useState, FormEvent } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePomodoro } from '../contexts/PomodoroContext';
 import { focusGoalService, categoryService } from '../api/services';
-import type { FocusGoal, Category } from '../types';
+import type { FocusGoal, Category, GoalType } from '../types';
 import { secondsToHours } from '../utils/formatters';
 import './Goals.css';
 
@@ -12,8 +12,10 @@ export default function Goals() {
   const [goals, setGoals] = useState<FocusGoal[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [category, setCategory] = useState('');
+  const [goalType, setGoalType] = useState<GoalType>('TIME_BASED');
   const [goalHours, setGoalHours] = useState('');
   const [goalMinutes, setGoalMinutes] = useState('');
+  const [description, setDescription] = useState('');
   const [newCategory, setNewCategory] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -64,59 +66,86 @@ export default function Goals() {
 
     if (!user) return;
 
-    const hours = parseInt(goalHours) || 0;
-    const minutes = parseInt(goalMinutes) || 0;
+    if (goalType === 'TIME_BASED') {
+      const hours = parseInt(goalHours) || 0;
+      const minutes = parseInt(goalMinutes) || 0;
 
-    if (hours < 0 || hours > 168) {
-      setError('Hours must be between 0 and 168');
-      return;
-    }
+      if (hours < 0 || hours > 168) {
+        setError('Hours must be between 0 and 168');
+        return;
+      }
 
-    if (minutes < 0 || minutes > 59) {
-      setError('Minutes must be between 0 and 59');
-      return;
-    }
+      if (minutes < 0 || minutes > 59) {
+        setError('Minutes must be between 0 and 59');
+        return;
+      }
 
-    if (hours === 0 && minutes === 0) {
-      setError('Please enter a goal greater than 0');
-      return;
-    }
+      if (hours === 0 && minutes === 0) {
+        setError('Please enter a goal greater than 0');
+        return;
+      }
 
-    const totalSeconds = hours * 3600 + minutes * 60;
+      const totalSeconds = hours * 3600 + minutes * 60;
 
-    if (totalSeconds > 604800) {
-      setError('Goal cannot exceed 168 hours per week');
-      return;
-    }
+      if (totalSeconds > 604800) {
+        setError('Goal cannot exceed 168 hours per week');
+        return;
+      }
 
-    try {
-      await focusGoalService.createGoal(user.email, {
-        category,
-        goal_time_per_week_seconds: totalSeconds,
-      });
+      try {
+        await focusGoalService.createGoal(user.email, {
+          category,
+          goal_type: goalType,
+          goal_time_per_week_seconds: totalSeconds,
+        });
 
-      const displayHours = hours > 0 ? `${hours}h` : '';
-      const displayMinutes = minutes > 0 ? `${minutes}m` : '';
-      const displayTime = [displayHours, displayMinutes].filter(Boolean).join(' ');
+        const displayHours = hours > 0 ? `${hours}h` : '';
+        const displayMinutes = minutes > 0 ? `${minutes}m` : '';
+        const displayTime = [displayHours, displayMinutes].filter(Boolean).join(' ');
 
-      setMessage(`Goal set for ${category}: ${displayTime} per week`);
-      setCategory('');
-      setGoalHours('');
-      setGoalMinutes('');
-      loadGoals();
-    } catch (err) {
-      setError('Failed to set goal. Please try again.');
-      console.error(err);
+        setMessage(`Goal set for ${category}: ${displayTime} per week`);
+        setCategory('');
+        setGoalHours('');
+        setGoalMinutes('');
+        loadGoals();
+      } catch (err) {
+        setError('Failed to set goal. Please try again.');
+        console.error(err);
+      }
+    } else {
+      // Checkbox goal
+      if (!description.trim()) {
+        setError('Please enter a goal description');
+        return;
+      }
+
+      try {
+        await focusGoalService.createGoal(user.email, {
+          category,
+          goal_type: goalType,
+          description: description.trim(),
+        });
+
+        const goalTypeLabel = goalType === 'DAILY_CHECKBOX' ? 'Daily' : 'Weekly';
+        setMessage(`${goalTypeLabel} goal created for ${category}: ${description}`);
+        setCategory('');
+        setDescription('');
+        loadGoals();
+      } catch (err) {
+        setError('Failed to set goal. Please try again.');
+        console.error(err);
+      }
     }
   };
 
   const handleDeleteGoal = async (goal: FocusGoal) => {
     if (!user) return;
-    if (!confirm(`Delete goal for ${goal.category}?`)) return;
+    const goalTypeLabel = goal.goal_type === 'TIME_BASED' ? 'time' : goal.goal_type === 'DAILY_CHECKBOX' ? 'daily' : 'weekly';
+    if (!confirm(`Delete ${goalTypeLabel} goal for ${goal.category}?`)) return;
 
     try {
-      await focusGoalService.deleteGoal(user.email, goal.category);
-      setGoals((prev) => prev.filter((g) => g.category !== goal.category));
+      await focusGoalService.deleteGoal(user.email, goal.category, goal.goal_type);
+      setGoals((prev) => prev.filter((g) => !(g.category === goal.category && g.goal_type === goal.goal_type)));
       setMessage(`Goal for ${goal.category} deleted`);
     } catch (error) {
       setError('Failed to delete goal');
@@ -408,34 +437,65 @@ export default function Goals() {
             </div>
 
             <div className="form-group">
-              <label>Goal per Week</label>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <div style={{ flex: 1 }}>
-                  <input
-                    id="goalHours"
-                    type="number"
-                    min="0"
-                    max="168"
-                    className="input"
-                    value={goalHours}
-                    onChange={(e) => setGoalHours(e.target.value)}
-                    placeholder="Hours (0-168)"
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <input
-                    id="goalMinutes"
-                    type="number"
-                    min="0"
-                    max="59"
-                    className="input"
-                    value={goalMinutes}
-                    onChange={(e) => setGoalMinutes(e.target.value)}
-                    placeholder="Minutes (0-59)"
-                  />
+              <label htmlFor="goalType">Goal Type</label>
+              <select
+                id="goalType"
+                className="input"
+                value={goalType}
+                onChange={(e) => setGoalType(e.target.value as GoalType)}
+                required
+              >
+                <option value="TIME_BASED">Time-based (hours per week)</option>
+                <option value="DAILY_CHECKBOX">Daily Checkbox</option>
+                <option value="WEEKLY_CHECKBOX">Weekly Checkbox</option>
+              </select>
+            </div>
+
+            {goalType === 'TIME_BASED' ? (
+              <div className="form-group">
+                <label>Goal per Week</label>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <div style={{ flex: 1 }}>
+                    <input
+                      id="goalHours"
+                      type="number"
+                      min="0"
+                      max="168"
+                      className="input"
+                      value={goalHours}
+                      onChange={(e) => setGoalHours(e.target.value)}
+                      placeholder="Hours (0-168)"
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <input
+                      id="goalMinutes"
+                      type="number"
+                      min="0"
+                      max="59"
+                      className="input"
+                      value={goalMinutes}
+                      onChange={(e) => setGoalMinutes(e.target.value)}
+                      placeholder="Minutes (0-59)"
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="form-group">
+                <label htmlFor="description">Goal Description</label>
+                <input
+                  id="description"
+                  type="text"
+                  className="input"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="e.g., Meditate for 5 minutes"
+                  maxLength={255}
+                  required
+                />
+              </div>
+            )}
 
             {message && <div className="success">{message}</div>}
             {error && <div className="error">{error}</div>}
@@ -452,23 +512,38 @@ export default function Goals() {
             <p className="empty-state">No goals set yet. Create your first goal!</p>
           ) : (
             <div className="goals-list">
-              {goals.map((goal) => (
-                <div key={goal.category} className="goal-item">
-                  <div className="goal-info">
-                    <span className="goal-category">{goal.category}</span>
-                    <span className="goal-target">
-                      {secondsToHours(goal.goal_time_per_week_seconds).toFixed(1)} hrs/week
-                    </span>
+              {goals.map((goal) => {
+                const goalTypeLabel = goal.goal_type === 'TIME_BASED' ? 'Time' : goal.goal_type === 'DAILY_CHECKBOX' ? 'Daily' : 'Weekly';
+                return (
+                  <div key={`${goal.category}-${goal.goal_type}`} className="goal-item">
+                    <div className="goal-info">
+                      <span className="goal-category">{goal.category}</span>
+                      <span className="goal-type-badge" style={{
+                        fontSize: '0.75rem',
+                        padding: '0.15rem 0.5rem',
+                        backgroundColor: '#f0f0f0',
+                        borderRadius: '4px',
+                        marginLeft: '0.5rem'
+                      }}>
+                        {goalTypeLabel}
+                      </span>
+                      <span className="goal-target">
+                        {goal.goal_type === 'TIME_BASED'
+                          ? `${secondsToHours(goal.goal_time_per_week_seconds || 0).toFixed(1)} hrs/week`
+                          : goal.description
+                        }
+                      </span>
+                    </div>
+                    <button
+                      className="btn-delete"
+                      onClick={() => handleDeleteGoal(goal)}
+                      title="Delete goal"
+                    >
+                      ×
+                    </button>
                   </div>
-                  <button
-                    className="btn-delete"
-                    onClick={() => handleDeleteGoal(goal)}
-                    title="Delete goal"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

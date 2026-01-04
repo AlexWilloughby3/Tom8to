@@ -37,7 +37,9 @@ class FocusGoalInformation(Base):
 
     email = Column(String(255), ForeignKey("user_information.email"), primary_key=True, nullable=False)
     category = Column(String(255), primary_key=True, nullable=False)
-    goal_time_per_week_seconds = Column(Integer, nullable=False)
+    goal_type = Column(String(50), primary_key=True, nullable=False)  # 'TIME_BASED', 'DAILY_CHECKBOX', 'WEEKLY_CHECKBOX'
+    goal_time_per_week_seconds = Column(Integer, nullable=True)  # Only for TIME_BASED goals
+    description = Column(String(255), nullable=True)  # Description for checkbox goals
 
     # Relationship to user
     user = relationship("UserInformation", back_populates="focus_goals")
@@ -85,3 +87,18 @@ class PendingRegistration(Base):
     code = Column(String(6), nullable=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)
+
+
+class CheckboxGoalCompletion(Base):
+    """Table 8: Checkbox goal completion tracking"""
+    __tablename__ = "checkbox_goal_completions"
+
+    email = Column(String(255), ForeignKey("user_information.email"), primary_key=True, nullable=False)
+    category = Column(String(255), primary_key=True, nullable=False)
+    goal_type = Column(String(50), primary_key=True, nullable=False)  # 'DAILY_CHECKBOX' or 'WEEKLY_CHECKBOX'
+    completion_date = Column(DateTime, primary_key=True, nullable=False)  # Midnight ET of the day/week in UTC
+    completed = Column(Boolean, nullable=False, default=False)
+    completed_at = Column(DateTime, nullable=True)  # When user checked it off
+
+    # Relationship to user
+    user = relationship("UserInformation")

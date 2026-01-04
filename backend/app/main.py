@@ -233,7 +233,10 @@ def create_focus_goal(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return crud.create_focus_goal(db=db, email=email, goal=goal)
+    try:
+        return crud.create_focus_goal(db=db, email=email, goal=goal)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/api/users/{email}/focus-goals", response_model=List[schemas.FocusGoal])
@@ -248,21 +251,69 @@ def get_focus_goals(email: str, db: Session = Depends(get_db)):
 
 
 @app.get("/api/users/{email}/focus-goals/{category}", response_model=schemas.FocusGoal)
-def get_focus_goal(email: str, category: str, db: Session = Depends(get_db)):
+def get_focus_goal(email: str, category: str, goal_type: str = Query(..., description="Goal type: TIME_BASED, DAILY_CHECKBOX, or WEEKLY_CHECKBOX"), db: Session = Depends(get_db)):
     """Get a specific focus goal"""
-    db_goal = crud.get_focus_goal(db, email=email, category=category)
+    db_goal = crud.get_focus_goal(db, email=email, category=category, goal_type=goal_type)
     if db_goal is None:
         raise HTTPException(status_code=404, detail="Focus goal not found")
     return db_goal
 
 
 @app.delete("/api/users/{email}/focus-goals/{category}", status_code=204)
-def delete_focus_goal(email: str, category: str, db: Session = Depends(get_db)):
+def delete_focus_goal(email: str, category: str, goal_type: str = Query(..., description="Goal type: TIME_BASED, DAILY_CHECKBOX, or WEEKLY_CHECKBOX"), db: Session = Depends(get_db)):
     """Delete a focus goal"""
-    success = crud.delete_focus_goal(db, email=email, category=category)
+    success = crud.delete_focus_goal(db, email=email, category=category, goal_type=goal_type)
     if not success:
         raise HTTPException(status_code=404, detail="Focus goal not found")
     return None
+
+
+# ===== CHECKBOX COMPLETION ENDPOINTS =====
+
+@app.post("/api/users/{email}/checkbox-completions", response_model=schemas.CheckboxCompletion, status_code=201)
+def toggle_checkbox_completion(
+    email: str,
+    completion: schemas.CheckboxCompletionCreate,
+    db: Session = Depends(get_db)
+):
+    """Toggle checkbox completion for a goal (today for daily, this week for weekly)"""
+    user = crud.get_user(db, email=email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    try:
+        return crud.toggle_checkbox_completion(
+            db=db,
+            email=email,
+            category=completion.category,
+            goal_type=completion.goal_type
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/users/{email}/checkbox-completions", response_model=List[schemas.CheckboxCompletion])
+def get_checkbox_completions(
+    email: str,
+    category: Optional[str] = None,
+    goal_type: Optional[str] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    db: Session = Depends(get_db)
+):
+    """Get checkbox completions for a user with optional filters"""
+    user = crud.get_user(db, email=email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return crud.get_checkbox_completions(
+        db=db,
+        email=email,
+        start_date=start_date,
+        end_date=end_date,
+        category=category,
+        goal_type=goal_type
+    )
 
 
 # ===== STATISTICS ENDPOINTS =====

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { statsService } from '../api/services';
+import { statsService, checkboxService } from '../api/services';
 import type { UserStats } from '../types';
 import { formatDuration } from '../utils/formatters';
 import FocusTimeGraph from '../components/FocusTimeGraph';
@@ -26,6 +26,34 @@ export default function Dashboard() {
       console.error('Failed to load dashboard data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleDailyCheckbox = async (category: string) => {
+    if (!user) return;
+
+    try {
+      await checkboxService.toggleCompletion(user.email, {
+        category,
+        goal_type: 'DAILY_CHECKBOX',
+      });
+      loadDashboardData();
+    } catch (error) {
+      console.error('Failed to toggle daily checkbox:', error);
+    }
+  };
+
+  const handleToggleWeeklyCheckbox = async (category: string) => {
+    if (!user) return;
+
+    try {
+      await checkboxService.toggleCompletion(user.email, {
+        category,
+        goal_type: 'WEEKLY_CHECKBOX',
+      });
+      loadDashboardData();
+    } catch (error) {
+      console.error('Failed to toggle weekly checkbox:', error);
     }
   };
 
@@ -99,6 +127,128 @@ export default function Dashboard() {
 
           {/* Focus Time Graph */}
           <FocusTimeGraph />
+        </div>
+      )}
+
+      {/* Daily Checkbox Goals */}
+      {weeklyStats && weeklyStats.categories.some(cat =>
+        cat.daily_checkbox_goals && cat.daily_checkbox_goals.length > 0
+      ) && (
+        <div className="card" style={{ marginTop: '2rem' }}>
+          <h2>Daily Goals</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
+            {weeklyStats.categories.map((cat) =>
+              cat.daily_checkbox_goals?.map((goal, idx) => {
+                // Get today's date for checking if today's completion exists
+                const today = new Date().toISOString().split('T')[0];
+
+                return (
+                  <div key={`${cat.category}-daily-${idx}`} style={{
+                    padding: '1rem',
+                    border: '1px solid #ddd',
+                    borderRadius: '8px',
+                    backgroundColor: '#fff'
+                  }}>
+                    <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', color: '#c23838' }}>
+                      {cat.category}
+                    </h3>
+                    <p style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: '#666' }}>
+                      {goal.description}
+                    </p>
+
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, dayIdx) => {
+                        // Calculate the date for this day of the week
+                        const now = new Date();
+                        const currentDay = now.getDay(); // 0 = Sunday
+                        const diff = dayIdx - currentDay;
+                        const targetDate = new Date(now);
+                        targetDate.setDate(now.getDate() + diff);
+                        const dateStr = targetDate.toISOString().split('T')[0];
+
+                        const completion = goal.completions?.find(c => c.date === dateStr);
+                        const isToday = dateStr === today;
+
+                        return (
+                          <div key={day} style={{ flex: '0 0 auto', textAlign: 'center' }}>
+                            <label style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: '0.25rem',
+                              cursor: isToday ? 'pointer' : 'default',
+                              opacity: isToday ? 1 : 0.6
+                            }}>
+                              <input
+                                type="checkbox"
+                                checked={completion?.completed || false}
+                                onChange={() => isToday && handleToggleDailyCheckbox(cat.category)}
+                                disabled={!isToday}
+                                style={{
+                                  width: '20px',
+                                  height: '20px',
+                                  cursor: isToday ? 'pointer' : 'not-allowed'
+                                }}
+                              />
+                              <span style={{ fontSize: '0.75rem', color: '#666' }}>{day}</span>
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Weekly Checkbox Goals */}
+      {weeklyStats && weeklyStats.categories.some(cat =>
+        cat.weekly_checkbox_goals && cat.weekly_checkbox_goals.length > 0
+      ) && (
+        <div className="card" style={{ marginTop: '2rem' }}>
+          <h2>Weekly Goals</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
+            {weeklyStats.categories.map((cat) =>
+              cat.weekly_checkbox_goals?.map((goal, idx) => (
+                <div key={`${cat.category}-weekly-${idx}`} style={{
+                  padding: '1rem',
+                  border: '1px solid #ddd',
+                  borderRadius: '8px',
+                  backgroundColor: '#fff'
+                }}>
+                  <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', color: '#c23838' }}>
+                    {cat.category}
+                  </h3>
+                  <p style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: '#666' }}>
+                    {goal.description}
+                  </p>
+
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    cursor: 'pointer',
+                    fontSize: '1rem'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={goal.completed}
+                      onChange={() => handleToggleWeeklyCheckbox(cat.category)}
+                      style={{
+                        width: '24px',
+                        height: '24px',
+                        cursor: 'pointer'
+                      }}
+                    />
+                    <span>Complete this week</span>
+                  </label>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -204,17 +204,30 @@ def delete_focus_session(db: Session, email: str, time: datetime) -> bool:
 
 def create_focus_goal(db: Session, email: str, goal: schemas.FocusGoalCreate) -> models.FocusGoalInformation:
     """Create or update a focus goal for a category"""
-    db_goal = get_focus_goal(db, email, goal.category)
+    # Validation: TIME_BASED goals must have goal_time_per_week_seconds
+    if goal.goal_type == "TIME_BASED" and not goal.goal_time_per_week_seconds:
+        raise ValueError("TIME_BASED goals must specify goal_time_per_week_seconds")
+
+    # Validation: Checkbox goals should have description
+    if goal.goal_type in ["DAILY_CHECKBOX", "WEEKLY_CHECKBOX"] and not goal.description:
+        raise ValueError("Checkbox goals should have a description")
+
+    db_goal = get_focus_goal(db, email, goal.category, goal.goal_type)
 
     if db_goal:
         # Update existing goal
-        db_goal.goal_time_per_week_seconds = goal.goal_time_per_week_seconds
+        if goal.goal_time_per_week_seconds is not None:
+            db_goal.goal_time_per_week_seconds = goal.goal_time_per_week_seconds
+        if goal.description is not None:
+            db_goal.description = goal.description
     else:
         # Create new goal
         db_goal = models.FocusGoalInformation(
             email=email,
             category=goal.category,
-            goal_time_per_week_seconds=goal.goal_time_per_week_seconds
+            goal_type=goal.goal_type,
+            goal_time_per_week_seconds=goal.goal_time_per_week_seconds,
+            description=goal.description
         )
         db.add(db_goal)
 
@@ -223,11 +236,12 @@ def create_focus_goal(db: Session, email: str, goal: schemas.FocusGoalCreate) ->
     return db_goal
 
 
-def get_focus_goal(db: Session, email: str, category: str) -> Optional[models.FocusGoalInformation]:
+def get_focus_goal(db: Session, email: str, category: str, goal_type: str) -> Optional[models.FocusGoalInformation]:
     """Get a specific focus goal"""
     return db.query(models.FocusGoalInformation).filter(
         models.FocusGoalInformation.email == email,
-        models.FocusGoalInformation.category == category
+        models.FocusGoalInformation.category == category,
+        models.FocusGoalInformation.goal_type == goal_type
     ).first()
 
 
@@ -238,14 +252,130 @@ def get_focus_goals(db: Session, email: str) -> List[models.FocusGoalInformation
     ).all()
 
 
-def delete_focus_goal(db: Session, email: str, category: str) -> bool:
+def delete_focus_goal(db: Session, email: str, category: str, goal_type: str) -> bool:
     """Delete a focus goal"""
-    db_goal = get_focus_goal(db, email, category)
+    db_goal = get_focus_goal(db, email, category, goal_type)
     if db_goal:
+        # Also delete all associated checkbox completions if it's a checkbox goal
+        if goal_type in ["DAILY_CHECKBOX", "WEEKLY_CHECKBOX"]:
+            db.query(models.CheckboxGoalCompletion).filter(
+                models.CheckboxGoalCompletion.email == email,
+                models.CheckboxGoalCompletion.category == category,
+                models.CheckboxGoalCompletion.goal_type == goal_type
+            ).delete()
+
         db.delete(db_goal)
         db.commit()
         return True
     return False
+
+
+# ===== CHECKBOX GOAL COMPLETION OPERATIONS =====
+
+def toggle_checkbox_completion(
+    db: Session,
+    email: str,
+    category: str,
+    goal_type: str,
+    completion_date: Optional[datetime] = None
+) -> models.CheckboxGoalCompletion:
+    """Toggle checkbox completion for today (daily) or this week (weekly)"""
+    from . import timezone_utils
+    from datetime import timedelta
+
+    # Validate goal exists
+    goal = get_focus_goal(db, email, category, goal_type)
+    if not goal:
+        raise ValueError(f"No {goal_type} goal found for category {category}")
+
+    # Calculate completion_date based on goal_type
+    if completion_date is None:
+        now_eastern = timezone_utils.get_eastern_now()
+
+        if goal_type == "DAILY_CHECKBOX":
+            # Midnight of today in ET
+            completion_date = timezone_utils.get_eastern_midnight(now_eastern)
+        elif goal_type == "WEEKLY_CHECKBOX":
+            # Sunday midnight of this week in ET
+            week_start = timezone_utils.get_eastern_week_start(now_eastern)
+            # Adjust to Sunday (week_start returns Monday, so go back 1 day)
+            completion_date = week_start - timedelta(days=1)
+        else:
+            raise ValueError(f"Invalid goal_type for checkbox: {goal_type}")
+
+    # Convert to UTC for storage
+    completion_date_utc = timezone_utils.eastern_to_utc(completion_date).replace(tzinfo=None)
+
+    # Check if completion already exists
+    db_completion = db.query(models.CheckboxGoalCompletion).filter(
+        models.CheckboxGoalCompletion.email == email,
+        models.CheckboxGoalCompletion.category == category,
+        models.CheckboxGoalCompletion.goal_type == goal_type,
+        models.CheckboxGoalCompletion.completion_date == completion_date_utc
+    ).first()
+
+    if db_completion:
+        # Toggle existing
+        db_completion.completed = not db_completion.completed
+        db_completion.completed_at = timezone_utils.eastern_to_utc(
+            timezone_utils.get_eastern_now()
+        ).replace(tzinfo=None) if db_completion.completed else None
+    else:
+        # Create new (mark as completed)
+        db_completion = models.CheckboxGoalCompletion(
+            email=email,
+            category=category,
+            goal_type=goal_type,
+            completion_date=completion_date_utc,
+            completed=True,
+            completed_at=timezone_utils.eastern_to_utc(timezone_utils.get_eastern_now()).replace(tzinfo=None)
+        )
+        db.add(db_completion)
+
+    db.commit()
+    db.refresh(db_completion)
+    return db_completion
+
+
+def get_checkbox_completions(
+    db: Session,
+    email: str,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    category: Optional[str] = None,
+    goal_type: Optional[str] = None
+) -> List[models.CheckboxGoalCompletion]:
+    """Get checkbox completions with optional filters"""
+    query = db.query(models.CheckboxGoalCompletion).filter(
+        models.CheckboxGoalCompletion.email == email
+    )
+
+    if start_date:
+        query = query.filter(models.CheckboxGoalCompletion.completion_date >= start_date)
+    if end_date:
+        query = query.filter(models.CheckboxGoalCompletion.completion_date <= end_date)
+    if category:
+        query = query.filter(models.CheckboxGoalCompletion.category == category)
+    if goal_type:
+        query = query.filter(models.CheckboxGoalCompletion.goal_type == goal_type)
+
+    return query.order_by(models.CheckboxGoalCompletion.completion_date.desc()).all()
+
+
+def get_checkbox_completion(
+    db: Session,
+    email: str,
+    category: str,
+    goal_type: str,
+    completion_date: datetime
+) -> Optional[models.CheckboxGoalCompletion]:
+    """Get a specific checkbox completion"""
+    return db.query(models.CheckboxGoalCompletion).filter(
+        models.CheckboxGoalCompletion.email == email,
+        models.CheckboxGoalCompletion.category == category,
+        models.CheckboxGoalCompletion.goal_type == goal_type,
+        models.CheckboxGoalCompletion.completion_date == completion_date
+    ).first()
 
 
 # ===== STATISTICS OPERATIONS =====
@@ -282,9 +412,26 @@ def get_user_stats(
     category_stats = query.group_by(models.FocusInformation.category).all()
 
     # Get goals for active categories only
+    from . import timezone_utils
+    from datetime import timedelta
+
     all_goals = get_focus_goals(db, email)
-    goals = {goal.category: goal.goal_time_per_week_seconds
-             for goal in all_goals if goal.category in active_category_names}
+    time_goals = {}
+    checkbox_goals_by_category = {}
+
+    for goal in all_goals:
+        if goal.category not in active_category_names:
+            continue
+
+        if goal.goal_type == "TIME_BASED":
+            time_goals[goal.category] = goal.goal_time_per_week_seconds
+        else:
+            if goal.category not in checkbox_goals_by_category:
+                checkbox_goals_by_category[goal.category] = {'daily': [], 'weekly': []}
+            if goal.goal_type == "DAILY_CHECKBOX":
+                checkbox_goals_by_category[goal.category]['daily'].append(goal)
+            elif goal.goal_type == "WEEKLY_CHECKBOX":
+                checkbox_goals_by_category[goal.category]['weekly'].append(goal)
 
     # Build time stats dict
     time_stats = {}
@@ -297,17 +444,30 @@ def get_user_stats(
                 'avg_time': avg_time or 0
             }
 
-    # Build response - include ALL goals, even if no time logged
+    # Get checkbox completions for the date range
+    now_eastern = timezone_utils.get_eastern_now()
+    week_start_eastern = timezone_utils.get_eastern_week_start(now_eastern)
+    week_start_utc = timezone_utils.eastern_to_utc(week_start_eastern).replace(tzinfo=None)
+
+    # For daily goals, get last 7 days
+    today_midnight_eastern = timezone_utils.get_eastern_midnight(now_eastern)
+    seven_days_ago = today_midnight_eastern - timedelta(days=6)
+    seven_days_ago_utc = timezone_utils.eastern_to_utc(seven_days_ago).replace(tzinfo=None)
+
+    # Build response - include ALL categories with goals or time
     categories = []
     total_time = 0
     total_sessions = 0
 
-    # First, add all categories with goals (even if 0 time)
-    for category, goal_time in goals.items():
+    # Get all categories that have either time logged, time goals, or checkbox goals
+    all_categories = set(time_goals.keys()) | set(time_stats.keys()) | set(checkbox_goals_by_category.keys())
+
+    for category in all_categories:
         stats = time_stats.get(category, {'total_time': 0, 'session_count': 0, 'avg_time': 0})
         total_cat_time = stats['total_time']
         session_count = stats['session_count']
         avg_time = stats['avg_time']
+        goal_time = time_goals.get(category)
 
         total_time += total_cat_time
         total_sessions += session_count
@@ -316,29 +476,56 @@ def get_user_stats(
         if goal_time and goal_time > 0:
             progress = (total_cat_time / goal_time) * 100
 
+        # Get checkbox goals data for this category
+        daily_checkbox_data = []
+        weekly_checkbox_data = []
+
+        if category in checkbox_goals_by_category:
+            # Process daily goals
+            for daily_goal in checkbox_goals_by_category[category]['daily']:
+                completions = db.query(models.CheckboxGoalCompletion).filter(
+                    models.CheckboxGoalCompletion.email == email,
+                    models.CheckboxGoalCompletion.category == category,
+                    models.CheckboxGoalCompletion.goal_type == "DAILY_CHECKBOX",
+                    models.CheckboxGoalCompletion.completion_date >= seven_days_ago_utc
+                ).all()
+
+                daily_checkbox_data.append({
+                    'description': daily_goal.description,
+                    'completions': [
+                        {
+                            'date': timezone_utils.utc_to_eastern(c.completion_date).date().isoformat(),
+                            'completed': c.completed
+                        } for c in completions
+                    ]
+                })
+
+            # Process weekly goals
+            for weekly_goal in checkbox_goals_by_category[category]['weekly']:
+                # Adjust week_start_utc to Sunday (it currently returns Monday)
+                sunday_midnight = week_start_utc - timedelta(days=1)
+                completion = db.query(models.CheckboxGoalCompletion).filter(
+                    models.CheckboxGoalCompletion.email == email,
+                    models.CheckboxGoalCompletion.category == category,
+                    models.CheckboxGoalCompletion.goal_type == "WEEKLY_CHECKBOX",
+                    models.CheckboxGoalCompletion.completion_date == sunday_midnight
+                ).first()
+
+                weekly_checkbox_data.append({
+                    'description': weekly_goal.description,
+                    'completed': completion.completed if completion else False
+                })
+
         categories.append(schemas.CategoryStats(
             category=category,
             total_time_seconds=total_cat_time,
             session_count=session_count,
             average_time_seconds=avg_time,
             goal_time_per_week_seconds=goal_time,
-            progress_percentage=progress
+            progress_percentage=progress,
+            daily_checkbox_goals=daily_checkbox_data,
+            weekly_checkbox_goals=weekly_checkbox_data
         ))
-
-    # Then add categories with time but no goal (if any)
-    for category, stats in time_stats.items():
-        if category not in goals:
-            total_time += stats['total_time']
-            total_sessions += stats['session_count']
-
-            categories.append(schemas.CategoryStats(
-                category=category,
-                total_time_seconds=stats['total_time'],
-                session_count=stats['session_count'],
-                average_time_seconds=stats['avg_time'],
-                goal_time_per_week_seconds=None,
-                progress_percentage=None
-            ))
 
     return schemas.UserStats(
         email=email,
@@ -956,9 +1143,12 @@ def get_leaderboard_data(db: Session) -> List[schemas.LeaderboardEntry]:
         goals_this_week = [g for g in goals if g.category in active_category_names]
         total_goals_this_week = len(goals_this_week)
 
-        # Calculate goals completed this week
+        # Calculate goals completed this week (TIME_BASED only)
         goals_completed_this_week = 0
-        for goal in goals_this_week:
+        time_goals_this_week = [g for g in goals_this_week if g.goal_type == "TIME_BASED"]
+        total_goals_this_week = len(time_goals_this_week)  # Update to count only TIME_BASED
+
+        for goal in time_goals_this_week:
             time_logged = db.query(
                 func.sum(models.FocusInformation.focus_time_seconds)
             ).filter(
@@ -967,42 +1157,111 @@ def get_leaderboard_data(db: Session) -> List[schemas.LeaderboardEntry]:
                 models.FocusInformation.time >= week_start_utc
             ).scalar() or 0
 
-            if time_logged >= goal.goal_time_per_week_seconds:
+            if goal.goal_time_per_week_seconds and time_logged >= goal.goal_time_per_week_seconds:
                 goals_completed_this_week += 1
+
+        # Calculate checkbox goal completions this week
+        from datetime import timedelta
+
+        daily_checkbox_goals = [g for g in goals_this_week if g.goal_type == "DAILY_CHECKBOX"]
+        weekly_checkbox_goals = [g for g in goals_this_week if g.goal_type == "WEEKLY_CHECKBOX"]
+
+        total_daily_goals = len(daily_checkbox_goals)
+        total_weekly_goals = len(weekly_checkbox_goals)
+
+        # Count daily completions this week (7 days × number of daily goals)
+        daily_goals_completed = 0
+        week_start_eastern = timezone_utils.utc_to_eastern(week_start_utc)
+
+        for goal in daily_checkbox_goals:
+            # Check each of the last 7 days
+            for i in range(7):
+                day_midnight = week_start_eastern + timedelta(days=i)
+                day_midnight_utc = timezone_utils.eastern_to_utc(day_midnight).replace(tzinfo=None)
+
+                completion = db.query(models.CheckboxGoalCompletion).filter(
+                    models.CheckboxGoalCompletion.email == email,
+                    models.CheckboxGoalCompletion.category == goal.category,
+                    models.CheckboxGoalCompletion.goal_type == "DAILY_CHECKBOX",
+                    models.CheckboxGoalCompletion.completion_date == day_midnight_utc,
+                    models.CheckboxGoalCompletion.completed == True
+                ).first()
+                if completion:
+                    daily_goals_completed += 1
+
+        # Count weekly completions this week
+        weekly_goals_completed = 0
+        # Adjust to Sunday midnight (week_start_utc is Monday)
+        sunday_midnight_utc = week_start_utc - timedelta(days=1)
+
+        for goal in weekly_checkbox_goals:
+            completion = db.query(models.CheckboxGoalCompletion).filter(
+                models.CheckboxGoalCompletion.email == email,
+                models.CheckboxGoalCompletion.category == goal.category,
+                models.CheckboxGoalCompletion.goal_type == "WEEKLY_CHECKBOX",
+                models.CheckboxGoalCompletion.completion_date == sunday_midnight_utc,
+                models.CheckboxGoalCompletion.completed == True
+            ).first()
+            if completion:
+                weekly_goals_completed += 1
 
         # Calculate goals completed all time (simplified - based on last completed week)
         # We'll count how many goals were completed in their best week
         goals_completed_all_time = 0
 
         # Get all historical goals (not just active ones)
-        all_goals = db.query(models.FocusGoalInformation).filter(
+        all_time_goals = db.query(models.FocusGoalInformation).filter(
             models.FocusGoalInformation.email == email
         ).all()
 
-        # For each goal, check if it was ever completed in any week
-        for goal in all_goals:
-            # Get all sessions for this category
-            sessions = db.query(models.FocusInformation).filter(
-                models.FocusInformation.email == email,
-                models.FocusInformation.category == goal.category
-            ).all()
+        # For each goal, check if it was ever completed
+        for goal in all_time_goals:
+            if goal.goal_type == "TIME_BASED":
+                # Get all sessions for this category
+                sessions = db.query(models.FocusInformation).filter(
+                    models.FocusInformation.email == email,
+                    models.FocusInformation.category == goal.category
+                ).all()
 
-            # Group by week and check if goal was met in any week
-            weekly_totals = {}
-            for session in sessions:
-                # Convert session time to Eastern and get week start
-                eastern_time = timezone_utils.utc_to_eastern(session.time) if session.time.tzinfo else session.time.replace(tzinfo=timezone_utils.EASTERN)
-                week_start_date = timezone_utils.get_eastern_week_start(eastern_time)
-                week_key = week_start_date.date()
-                if week_key not in weekly_totals:
-                    weekly_totals[week_key] = 0
-                weekly_totals[week_key] += session.focus_time_seconds
+                # Group by week and check if goal was met in any week
+                weekly_totals = {}
+                for session in sessions:
+                    # Convert session time to Eastern and get week start
+                    eastern_time = timezone_utils.utc_to_eastern(session.time) if session.time.tzinfo else session.time.replace(tzinfo=timezone_utils.EASTERN)
+                    week_start_date = timezone_utils.get_eastern_week_start(eastern_time)
+                    week_key = week_start_date.date()
+                    if week_key not in weekly_totals:
+                        weekly_totals[week_key] = 0
+                    weekly_totals[week_key] += session.focus_time_seconds
 
-            # Check if goal was met in any week
-            for week_total in weekly_totals.values():
-                if week_total >= goal.goal_time_per_week_seconds:
+                # Check if goal was met in any week
+                if goal.goal_time_per_week_seconds:
+                    for week_total in weekly_totals.values():
+                        if week_total >= goal.goal_time_per_week_seconds:
+                            goals_completed_all_time += 1
+                            break  # Count this goal once
+
+            elif goal.goal_type == "DAILY_CHECKBOX":
+                # Check if this daily goal was ever completed on any day
+                completion = db.query(models.CheckboxGoalCompletion).filter(
+                    models.CheckboxGoalCompletion.email == email,
+                    models.CheckboxGoalCompletion.category == goal.category,
+                    models.CheckboxGoalCompletion.goal_type == "DAILY_CHECKBOX",
+                    models.CheckboxGoalCompletion.completed == True
+                ).first()
+                if completion:
                     goals_completed_all_time += 1
-                    break  # Count this goal once
+
+            elif goal.goal_type == "WEEKLY_CHECKBOX":
+                # Check if this weekly goal was ever completed on any week
+                completion = db.query(models.CheckboxGoalCompletion).filter(
+                    models.CheckboxGoalCompletion.email == email,
+                    models.CheckboxGoalCompletion.category == goal.category,
+                    models.CheckboxGoalCompletion.goal_type == "WEEKLY_CHECKBOX",
+                    models.CheckboxGoalCompletion.completed == True
+                ).first()
+                if completion:
+                    goals_completed_all_time += 1
 
         leaderboard.append(schemas.LeaderboardEntry(
             email=email,
@@ -1010,7 +1269,11 @@ def get_leaderboard_data(db: Session) -> List[schemas.LeaderboardEntry]:
             focus_hours_all_time=round(focus_hours_all_time, 2),
             goals_completed_this_week=goals_completed_this_week,
             total_goals_this_week=total_goals_this_week,
-            goals_completed_all_time=goals_completed_all_time
+            goals_completed_all_time=goals_completed_all_time,
+            daily_goals_completed_this_week=daily_goals_completed,
+            total_daily_goals_this_week=total_daily_goals * 7,  # 7 days worth
+            weekly_goals_completed_this_week=weekly_goals_completed,
+            total_weekly_goals_this_week=total_weekly_goals
         ))
 
     # Sort by focus hours this week (descending)

@@ -1,3 +1,5 @@
+export type GoalType = 'TIME_BASED' | 'DAILY_CHECKBOX' | 'WEEKLY_CHECKBOX';
+
 export interface User {
   email: string;
   show_on_leaderboard: boolean;
@@ -17,7 +19,9 @@ export interface FocusSession {
 export interface FocusGoal {
   email: string;
   category: string;
-  goal_time_per_week_seconds: number;
+  goal_type: GoalType;
+  goal_time_per_week_seconds?: number;
+  description?: string;
 }
 
 export interface CategoryStats {
@@ -27,6 +31,17 @@ export interface CategoryStats {
   average_time_seconds: number;
   goal_time_per_week_seconds?: number;
   progress_percentage?: number;
+  daily_checkbox_goals?: Array<{
+    description: string;
+    completions: Array<{
+      date: string;
+      completed: boolean;
+    }>;
+  }>;
+  weekly_checkbox_goals?: Array<{
+    description: string;
+    completed: boolean;
+  }>;
 }
 
 export interface UserStats {
@@ -53,7 +68,23 @@ export interface FocusSessionCreate {
 
 export interface FocusGoalCreate {
   category: string;
-  goal_time_per_week_seconds: number;
+  goal_type: GoalType;
+  goal_time_per_week_seconds?: number;
+  description?: string;
+}
+
+export interface CheckboxCompletion {
+  email: string;
+  category: string;
+  goal_type: GoalType;
+  completion_date: string;
+  completed: boolean;
+  completed_at?: string;
+}
+
+export interface CheckboxCompletionCreate {
+  category: string;
+  goal_type: GoalType;
 }
 
 export interface Category {
@@ -116,6 +147,10 @@ export interface LeaderboardEntry {
   goals_completed_this_week: number;
   total_goals_this_week: number;
   goals_completed_all_time: number;
+  daily_goals_completed_this_week: number;
+  total_daily_goals_this_week: number;
+  weekly_goals_completed_this_week: number;
+  total_weekly_goals_this_week: number;
 }
 
 // Data export/import types

@@ -8,6 +8,9 @@ import type {
   FocusSessionCreate,
   FocusGoal,
   FocusGoalCreate,
+  GoalType,
+  CheckboxCompletion,
+  CheckboxCompletionCreate,
   UserStats,
   Category,
   CategoryCreate,
@@ -92,12 +95,40 @@ export const focusGoalService = {
     return api.get<FocusGoal[]>(`/users/${encodeURIComponent(email)}/focus-goals`);
   },
 
-  async getGoal(email: string, category: string): Promise<FocusGoal> {
-    return api.get<FocusGoal>(`/users/${encodeURIComponent(email)}/focus-goals/${encodeURIComponent(category)}`);
+  async getGoal(email: string, category: string, goalType: GoalType): Promise<FocusGoal> {
+    return api.get<FocusGoal>(`/users/${encodeURIComponent(email)}/focus-goals/${encodeURIComponent(category)}?goal_type=${goalType}`);
   },
 
-  async deleteGoal(email: string, category: string): Promise<void> {
-    return api.delete<void>(`/users/${encodeURIComponent(email)}/focus-goals/${encodeURIComponent(category)}`);
+  async deleteGoal(email: string, category: string, goalType: GoalType): Promise<void> {
+    return api.delete<void>(`/users/${encodeURIComponent(email)}/focus-goals/${encodeURIComponent(category)}?goal_type=${goalType}`);
+  },
+};
+
+// Checkbox Completion Services
+export const checkboxService = {
+  async toggleCompletion(email: string, data: CheckboxCompletionCreate): Promise<CheckboxCompletion> {
+    return api.post<CheckboxCompletion>(`/users/${encodeURIComponent(email)}/checkbox-completions`, data);
+  },
+
+  async getCompletions(
+    email: string,
+    params?: {
+      category?: string;
+      goal_type?: GoalType;
+      start_date?: string;
+      end_date?: string;
+    }
+  ): Promise<CheckboxCompletion[]> {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) queryParams.append(key, String(value));
+      });
+    }
+    const query = queryParams.toString();
+    return api.get<CheckboxCompletion[]>(
+      `/users/${encodeURIComponent(email)}/checkbox-completions${query ? `?${query}` : ''}`
+    );
   },
 };
 
