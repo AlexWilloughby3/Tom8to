@@ -13,18 +13,31 @@ export default function FocusTimeGraph() {
   const [timeRange, setTimeRange] = useState<TimeRange>('week');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [loading, setLoading] = useState(false);
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
 
   useEffect(() => {
     loadGraphData();
-  }, [timeRange, selectedCategory]);
+  }, [timeRange, selectedCategory, customStartDate, customEndDate]);
 
   const loadGraphData = async () => {
     if (!user) return;
 
+    // Skip loading if custom range is selected but dates aren't set
+    if (timeRange === 'custom' && (!customStartDate || !customEndDate)) {
+      return;
+    }
+
     setLoading(true);
     try {
       const category = selectedCategory === 'all' ? undefined : selectedCategory;
-      const data = await graphService.getGraphData(user.email, timeRange, category);
+      const data = await graphService.getGraphData(
+        user.email,
+        timeRange,
+        category,
+        timeRange === 'custom' ? customStartDate : undefined,
+        timeRange === 'custom' ? customEndDate : undefined
+      );
       setGraphData(data);
     } catch (error) {
       console.error('Failed to load graph data:', error);
@@ -39,7 +52,10 @@ export default function FocusTimeGraph() {
   };
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+    // Parse date string manually to avoid timezone conversion issues
+    // dateStr format is "YYYY-MM-DD"
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day); // month is 0-indexed
     if (timeRange === 'week' || timeRange === 'month') {
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     } else {
@@ -65,6 +81,8 @@ export default function FocusTimeGraph() {
         return '6 Months';
       case 'ytd':
         return 'YTD';
+      case 'custom':
+        return 'Custom';
     }
   };
 
@@ -78,7 +96,7 @@ export default function FocusTimeGraph() {
     <div className="focus-time-graph">
       <div className="graph-controls">
         <div className="time-range-toggle">
-          {(['week', 'month', '6month', 'ytd'] as TimeRange[]).map((range) => (
+          {(['week', 'month', '6month', 'ytd', 'custom'] as TimeRange[]).map((range) => (
             <button
               key={range}
               className={`range-btn ${timeRange === range ? 'active' : ''}`}
@@ -106,6 +124,33 @@ export default function FocusTimeGraph() {
           </select>
         </div>
       </div>
+
+      {timeRange === 'custom' && (
+        <div className="custom-date-range">
+          <div className="date-input-group">
+            <label htmlFor="start-date">Start Date:</label>
+            <input
+              type="date"
+              id="start-date"
+              className="input"
+              value={customStartDate}
+              onChange={(e) => setCustomStartDate(e.target.value)}
+              max={customEndDate || undefined}
+            />
+          </div>
+          <div className="date-input-group">
+            <label htmlFor="end-date">End Date:</label>
+            <input
+              type="date"
+              id="end-date"
+              className="input"
+              value={customEndDate}
+              onChange={(e) => setCustomEndDate(e.target.value)}
+              min={customStartDate || undefined}
+            />
+          </div>
+        </div>
+      )}
 
       {graphData && graphData.data_points.length > 0 ? (
         <div className="graph-container">

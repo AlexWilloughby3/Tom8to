@@ -367,6 +367,47 @@ def delete_category(email: str, category: str, db: Session = Depends(get_db)):
     return None
 
 
+@app.put("/api/users/{email}/categories/{category}", response_model=schemas.CategoryRenameResponse)
+def rename_category(
+    email: str,
+    category: str,
+    rename_data: schemas.CategoryRename,
+    confirm_merge: bool = Query(False, description="Confirm merge if target category exists"),
+    db: Session = Depends(get_db)
+):
+    """
+    Rename a category or merge it into an existing category.
+
+    Two-step process:
+    1. First call without confirm_merge: Check if merge is needed
+    2. If merge needed, call again with confirm_merge=true to execute
+
+    Response indicates whether merge is required and provides message.
+    """
+    # Verify user exists
+    user = crud.get_user(db, email=email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    try:
+        result = crud.rename_category(
+            db=db,
+            email=email,
+            old_category=category,
+            new_category=rename_data.new_category,
+            confirm_merge=confirm_merge
+        )
+
+        return schemas.CategoryRenameResponse(
+            requires_merge=result['requires_merge'],
+            target_exists=result['target_exists'],
+            message=result['message']
+        )
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # ===== GRAPH DATA ENDPOINTS =====
 
 @app.get("/api/users/{email}/graph-data", response_model=schemas.GraphData)
@@ -374,20 +415,45 @@ def get_graph_data(
     email: str,
     time_range: str,
     category: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Get graph data for focus time visualization"""
+    """Get graph data for focus time visualization
+
+    Args:
+        email: User email
+        time_range: 'week', 'month', '6month', 'ytd', or 'custom'
+        category: Optional category filter
+        start_date: Start date for custom range (YYYY-MM-DD format, required if time_range='custom')
+        end_date: End date for custom range (YYYY-MM-DD format, required if time_range='custom')
+    """
     # Verify user exists
     user = crud.get_user(db, email=email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     # Validate time_range
-    valid_ranges = ['week', 'month', '6month', 'ytd']
+    valid_ranges = ['week', 'month', '6month', 'ytd', 'custom']
     if time_range not in valid_ranges:
         raise HTTPException(status_code=400, detail=f"Invalid time_range. Must be one of: {', '.join(valid_ranges)}")
 
-    return crud.get_graph_data(db=db, email=email, time_range=time_range, category=category)
+    # Validate custom date range
+    if time_range == 'custom':
+        if not start_date or not end_date:
+            raise HTTPException(status_code=400, detail="start_date and end_date are required for custom time range")
+
+    try:
+        return crud.get_graph_data(
+            db=db,
+            email=email,
+            time_range=time_range,
+            category=category,
+            start_date=start_date,
+            end_date=end_date
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # ===== AUTHENTICATION & VERIFICATION ENDPOINTS =====
@@ -495,3 +561,44 @@ def reset_password(request: schemas.PasswordReset, db: Session = Depends(get_db)
 def get_leaderboard(db: Session = Depends(get_db)):
     """Get leaderboard data for all users who have opted in"""
     return crud.get_leaderboard_data(db=db)
+
+
+# ===== DATA EXPORT/IMPORT ENDPOINTS =====
+
+@app.get("/api/users/{email}/export-data", response_model=schemas.UserDataExport)
+def export_user_data(email: str, db: Session = Depends(get_db)):
+    """Export all user data (categories, goals, sessions) as JSON
+
+    This is account-agnostic - the exported data can be imported into any account.
+    """
+    # Verify user exists
+    user = crud.get_user(db, email=email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return crud.export_user_data(db=db, email=email)
+
+
+@app.post("/api/users/{email}/import-data", response_model=schemas.ImportResult)
+def import_user_data(
+    email: str,
+    import_data: schemas.UserDataImport,
+    db: Session = Depends(get_db)
+):
+    """Import user data (categories, goals, sessions) from JSON
+
+    This is account-agnostic - data from any export can be imported.
+    When conflicts occur, imported data takes precedence:
+    - Categories: Updates existing or creates new
+    - Goals: Updates existing or creates new
+    - Sessions: Adds all sessions (no replacement)
+    """
+    # Verify user exists
+    user = crud.get_user(db, email=email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    try:
+        return crud.import_user_data(db=db, email=email, import_data=import_data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

@@ -114,6 +114,24 @@
   border: 1px solid #f5c6cb;
 }
 
+/* Data Management Buttons */
+.data-management-buttons {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.settings-note {
+  font-size: 0.85rem;
+  color: #666;
+  font-style: italic;
+  margin-top: 0.5rem;
+}
+
+body.dark-mode .settings-note {
+  color: #b0b0b0;
+}
+
 /* Dark Mode Styles */
 body.dark-mode {
   background: #121212;

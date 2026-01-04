@@ -120,6 +120,18 @@ class CategoryUpdate(BaseModel):
     active: bool = Field(..., description="Whether the category is active")
 
 
+class CategoryRename(BaseModel):
+    """Request to rename a category"""
+    new_category: str = Field(..., min_length=1, max_length=50, description="New category name")
+
+
+class CategoryRenameResponse(BaseModel):
+    """Response indicating whether merge is required"""
+    requires_merge: bool = Field(..., description="True if target category exists and merge is needed")
+    target_exists: bool = Field(..., description="True if target category already exists")
+    message: str = Field(..., description="Description of what will happen")
+
+
 # Graph data schemas
 class GraphDataPoint(BaseModel):
     date: str
@@ -145,6 +157,40 @@ class VerificationCodeLogin(BaseModel):
 class PasswordChangeRequest(BaseModel):
     current_password: str
     new_password: str = Field(..., min_length=8, description="New password (min 8 characters)")
+
+
+# Data export/import schemas
+class ExportedCategory(BaseModel):
+    category: str
+    active: bool
+
+class ExportedGoal(BaseModel):
+    category: str
+    goal_time_per_week_seconds: int
+
+class ExportedSession(BaseModel):
+    time: str  # ISO format datetime string
+    focus_time_seconds: int
+    category: str
+
+class UserDataExport(BaseModel):
+    version: str = "1.0"
+    export_date: str  # ISO format datetime string
+    categories: List[ExportedCategory]
+    goals: List[ExportedGoal]
+    sessions: List[ExportedSession]
+
+class UserDataImport(BaseModel):
+    version: str
+    categories: List[ExportedCategory]
+    goals: List[ExportedGoal]
+    sessions: List[ExportedSession]
+
+class ImportResult(BaseModel):
+    categories_imported: int
+    goals_imported: int
+    sessions_imported: int
+    message: str
 
 
 class PasswordResetRequest(BaseModel):

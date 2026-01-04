@@ -1,4 +1,5 @@
-import { Outlet, Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { usePomodoro } from '../contexts/PomodoroContext';
 import { formatTime } from '../utils/formatters';
@@ -7,6 +8,13 @@ import './Layout.css';
 export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    const saved = localStorage.getItem('sidebarOpen');
+    return saved === null ? true : saved === 'true';
+  });
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
   const {
     pomodoroRunning,
     pomodoroSeconds,
@@ -17,9 +25,65 @@ export default function Layout() {
     stopwatchSeconds
   } = usePomodoro();
 
+  const navItems = [
+    { path: '/', label: 'Dashboard' },
+    { path: '/timer', label: 'Timer' },
+    { path: '/goals', label: 'Goals' },
+    { path: '/leaderboard', label: 'Leaderboard' },
+    { path: '/settings', label: 'Settings' },
+  ];
+
+  // Update selected index based on current location
+  useEffect(() => {
+    const index = navItems.findIndex(item => item.path === location.pathname);
+    if (index !== -1) {
+      setSelectedIndex(index);
+    }
+  }, [location.pathname]);
+
+  // Save sidebar state to localStorage
+  useEffect(() => {
+    localStorage.setItem('sidebarOpen', sidebarOpen.toString());
+  }, [sidebarOpen]);
+
+  // Vim-style navigation with j/k: move and immediately navigate
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input, textarea, or select
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      if (e.key === 'j') {
+        e.preventDefault();
+        const newIndex = (selectedIndex + 1) % navItems.length;
+        setSelectedIndex(newIndex);
+        navigate(navItems[newIndex].path);
+      } else if (e.key === 'k') {
+        e.preventDefault();
+        const newIndex = (selectedIndex - 1 + navItems.length) % navItems.length;
+        setSelectedIndex(newIndex);
+        navigate(navItems[newIndex].path);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedIndex, navigate]);
+
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  const toggleSidebar = () => {
+    setSidebarOpen(!sidebarOpen);
   };
 
   return (
@@ -55,25 +119,42 @@ export default function Layout() {
         </div>
       )}
 
-      <nav className="navbar">
-        <div className="container">
-          <div className="nav-content">
-            <div className="nav-brand">
-              <h2>Tomato</h2>
-              <span className="user-id">@{user?.email}</span>
-            </div>
-            <div className="nav-links">
-              <Link to="/" className="nav-link">Dashboard</Link>
-              <Link to="/timer" className="nav-link">Timer</Link>
-              <Link to="/goals" className="nav-link">Goals</Link>
-              <Link to="/leaderboard" className="nav-link">Leaderboard</Link>
-              <Link to="/settings" className="nav-link">Settings</Link>
-              <button onClick={handleLogout} className="btn btn-secondary">Logout</button>
-            </div>
-          </div>
+      {/* Sidebar toggle button */}
+      <button
+        className="sidebar-toggle"
+        onClick={toggleSidebar}
+        aria-label="Toggle sidebar"
+      >
+        {sidebarOpen ? '←' : '→'}
+      </button>
+
+      {/* Sidebar */}
+      <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
+        <div className="sidebar-header">
+          <h2 className="sidebar-brand">Tomato</h2>
+          <span className="sidebar-user">@{user?.email}</span>
+          <button onClick={handleLogout} className="sidebar-logout-btn header-logout">
+            Logout
+          </button>
         </div>
-      </nav>
-      <main className="main-content">
+
+        <nav className="sidebar-nav">
+          {navItems.map((item, index) => (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`sidebar-link ${location.pathname === item.path ? 'active' : ''} ${selectedIndex === index ? 'selected' : ''}`}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+
+        <div className="sidebar-footer" />
+      </aside>
+
+      {/* Main content */}
+      <main className={`main-content ${sidebarOpen ? 'with-sidebar' : 'without-sidebar'}`}>
         <div className="container">
           <Outlet />
         </div>

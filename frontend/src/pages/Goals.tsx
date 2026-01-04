@@ -20,6 +20,13 @@ export default function Goals() {
   const [categoryMessage, setCategoryMessage] = useState('');
   const [categoryError, setCategoryError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [renamingCategory, setRenamingCategory] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [mergeConfirmation, setMergeConfirmation] = useState<{
+    oldCategory: string;
+    newCategory: string;
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     loadGoals();
@@ -182,6 +189,80 @@ export default function Goals() {
     }
   };
 
+  const handleRenameCategory = async (oldCategory: string) => {
+    if (!user || !renameValue.trim()) {
+      setCategoryError('Please enter a new category name');
+      return;
+    }
+
+    try {
+      // First call: check if merge is needed
+      const response = await categoryService.renameCategory(
+        user.email,
+        oldCategory,
+        renameValue.trim(),
+        false
+      );
+
+      if (response.requires_merge) {
+        // Show merge confirmation dialog
+        setMergeConfirmation({
+          oldCategory,
+          newCategory: renameValue.trim(),
+          message: response.message,
+        });
+        setRenamingCategory(null);
+        setRenameValue('');
+      } else {
+        // No merge needed, execute rename directly
+        const executeResponse = await categoryService.renameCategory(
+          user.email,
+          oldCategory,
+          renameValue.trim(),
+          true
+        );
+
+        setCategoryMessage(executeResponse.message);
+        setRenamingCategory(null);
+        setRenameValue('');
+        loadCategories();
+        reloadPomodoroCategories();
+        loadGoals(); // Reload goals in case goal was renamed
+      }
+    } catch (error) {
+      setCategoryError('Failed to rename category');
+      console.error(error);
+    }
+  };
+
+  const handleConfirmMerge = async () => {
+    if (!user || !mergeConfirmation) return;
+
+    try {
+      const response = await categoryService.renameCategory(
+        user.email,
+        mergeConfirmation.oldCategory,
+        mergeConfirmation.newCategory,
+        true
+      );
+
+      setCategoryMessage(response.message);
+      setMergeConfirmation(null);
+      loadCategories();
+      reloadPomodoroCategories();
+      loadGoals();
+    } catch (error) {
+      setCategoryError('Failed to merge categories');
+      console.error(error);
+      setMergeConfirmation(null);
+    }
+  };
+
+  const handleCancelRename = () => {
+    setRenamingCategory(null);
+    setRenameValue('');
+  };
+
   if (loading) {
     return <div className="loading">Loading goals...</div>;
   }
@@ -226,29 +307,76 @@ export default function Goals() {
             <div className="goals-list">
               {categories.map((cat) => (
                 <div key={cat.category} className="goal-item">
-                  <div className="goal-info">
-                    <span className="goal-category">{cat.category}</span>
-                    <span className="goal-target" style={{ fontSize: '0.85rem', opacity: 0.8 }}>
-                      {cat.active ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                    <label className="toggle-switch" title="Toggle active status">
+                  {renamingCategory === cat.category ? (
+                    // Rename mode
+                    <div style={{ flex: 1, display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                       <input
-                        type="checkbox"
-                        checked={cat.active}
-                        onChange={() => handleToggleCategory(cat)}
+                        type="text"
+                        className="input"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        placeholder="New category name"
+                        maxLength={50}
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRenameCategory(cat.category);
+                          if (e.key === 'Escape') handleCancelRename();
+                        }}
                       />
-                      <span className="toggle-slider"></span>
-                    </label>
-                    <button
-                      className="btn-delete"
-                      onClick={() => handleDeleteCategory(cat)}
-                      title="Delete category"
-                    >
-                      ×
-                    </button>
-                  </div>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => handleRenameCategory(cat.category)}
+                        style={{ padding: '0.25rem 0.75rem' }}
+                      >
+                        Save
+                      </button>
+                      <button
+                        className="btn"
+                        onClick={handleCancelRename}
+                        style={{ padding: '0.25rem 0.75rem' }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    // Normal display mode
+                    <>
+                      <div className="goal-info">
+                        <span className="goal-category">{cat.category}</span>
+                        <span className="goal-target" style={{ fontSize: '0.85rem', opacity: 0.8 }}>
+                          {cat.active ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <button
+                          className="btn"
+                          onClick={() => {
+                            setRenamingCategory(cat.category);
+                            setRenameValue(cat.category);
+                          }}
+                          title="Rename category"
+                          style={{ padding: '0.25rem 0.5rem', fontSize: '0.85rem' }}
+                        >
+                          Rename
+                        </button>
+                        <label className="toggle-switch" title="Toggle active status">
+                          <input
+                            type="checkbox"
+                            checked={cat.active}
+                            onChange={() => handleToggleCategory(cat)}
+                          />
+                          <span className="toggle-slider"></span>
+                        </label>
+                        <button
+                          className="btn-delete"
+                          onClick={() => handleDeleteCategory(cat)}
+                          title="Delete category"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -345,6 +473,32 @@ export default function Goals() {
           )}
         </div>
       </div>
+
+      {/* Merge Confirmation Dialog */}
+      {mergeConfirmation && (
+        <div className="modal-overlay" onClick={() => setMergeConfirmation(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Merge Categories?</h3>
+            <p>{mergeConfirmation.message}</p>
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+              <button
+                className="btn btn-primary"
+                onClick={handleConfirmMerge}
+                style={{ flex: 1 }}
+              >
+                Merge
+              </button>
+              <button
+                className="btn"
+                onClick={() => setMergeConfirmation(null)}
+                style={{ flex: 1 }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -192,4 +192,48 @@
   .bar-label {
     font-size: 0.65rem;
   }
+
+  .custom-date-range {
+    flex-direction: column;
+  }
+
+  .date-input-group {
+    width: 100%;
+  }
+
+  .date-input-group .input {
+    width: 100%;
+  }
+}
+
+/* Custom date range styles */
+.custom-date-range {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #f9f9f9;
+  border-radius: 8px;
+}
+
+.date-input-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.date-input-group label {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.date-input-group .input {
+  flex: 1;
+  min-width: 150px;
+}
+
+/* Dark mode support for custom date range */
+body.dark-mode .custom-date-range {
+  background: #2d2d2d;
 }

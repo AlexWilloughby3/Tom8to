@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { accountService, authService } from '../api/services';
+import { accountService, authService, dataService } from '../api/services';
+import type { UserDataImport } from '../types';
 import './Settings.css';
 
 export default function Settings() {
@@ -10,6 +11,7 @@ export default function Settings() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
     return saved === 'true';
@@ -122,6 +124,76 @@ export default function Settings() {
     }
   };
 
+  const handleExportData = async () => {
+    if (!user) return;
+    setError(null);
+    setMessage(null);
+    setLoading(true);
+    try {
+      const exportData = await dataService.exportData(user.email);
+
+      // Create a blob and download it
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `focus-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setMessage('Data exported successfully!');
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to export data');
+      setTimeout(() => setError(null), 3000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImportData = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!user) return;
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setError(null);
+    setMessage(null);
+    setLoading(true);
+
+    try {
+      const text = await file.text();
+      const importData: UserDataImport = JSON.parse(text);
+
+      // Validate the structure
+      if (!importData.version || !importData.categories || !importData.goals || !importData.sessions) {
+        throw new Error('Invalid import file format');
+      }
+
+      // Confirm import
+      if (!confirm(
+        `This will import ${importData.categories.length} categories, ${importData.goals.length} goals, ` +
+        `and ${importData.sessions.length} sessions. Existing data will be updated where conflicts occur. Continue?`
+      )) {
+        return;
+      }
+
+      const result = await dataService.importData(user.email, importData);
+      setMessage(result.message);
+      setTimeout(() => setMessage(null), 5000);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to import data');
+      setTimeout(() => setError(null), 3000);
+    } finally {
+      setLoading(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   return (
     <div className="settings-page">
       <h1>Settings</h1>
@@ -205,6 +277,36 @@ export default function Settings() {
         >
           {loading ? 'Sending...' : 'Send Password Reset Email'}
         </button>
+      </section>
+
+      <section className="settings-section">
+        <h2>Data Management</h2>
+        <p>Export your data as a backup or import data from a previous export.</p>
+        <div className="data-management-buttons">
+          <button
+            onClick={handleExportData}
+            className="btn btn-primary"
+            disabled={loading}
+          >
+            Export Data
+          </button>
+          <label htmlFor="import-file" className="btn btn-primary" style={{ cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1 }}>
+            Import Data
+          </label>
+          <input
+            ref={fileInputRef}
+            id="import-file"
+            type="file"
+            accept=".json"
+            onChange={handleImportData}
+            disabled={loading}
+            style={{ display: 'none' }}
+          />
+        </div>
+        <p className="settings-note">
+          Note: Exported data is account-agnostic and can be imported into any account.
+          When importing, existing data will be updated where conflicts occur.
+        </p>
       </section>
 
       <section className="settings-section">

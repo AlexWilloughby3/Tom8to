@@ -12,10 +12,14 @@ import type {
   Category,
   CategoryCreate,
   CategoryUpdate,
+  CategoryRenameResponse,
   GraphData,
   TimeRange,
   PasswordChangeRequest,
   LeaderboardEntry,
+  UserDataExport,
+  UserDataImport,
+  ImportResult,
 } from '../types';
 
 // User/Auth Services
@@ -140,14 +144,39 @@ export const categoryService = {
   async deleteCategory(email: string, category: string): Promise<void> {
     return api.delete<void>(`/users/${encodeURIComponent(email)}/categories/${encodeURIComponent(category)}`);
   },
+
+  async renameCategory(
+    email: string,
+    oldCategory: string,
+    newCategory: string,
+    confirmMerge: boolean = false
+  ): Promise<CategoryRenameResponse> {
+    const params = new URLSearchParams({ confirm_merge: confirmMerge.toString() });
+    return api.put<CategoryRenameResponse>(
+      `/users/${encodeURIComponent(email)}/categories/${encodeURIComponent(oldCategory)}?${params.toString()}`,
+      { new_category: newCategory }
+    );
+  },
 };
 
 // Graph Data Services
 export const graphService = {
-  async getGraphData(email: string, timeRange: TimeRange, category?: string): Promise<GraphData> {
+  async getGraphData(
+    email: string,
+    timeRange: TimeRange,
+    category?: string,
+    startDate?: string,
+    endDate?: string
+  ): Promise<GraphData> {
     const params = new URLSearchParams({ time_range: timeRange });
     if (category) {
       params.append('category', category);
+    }
+    if (startDate) {
+      params.append('start_date', startDate);
+    }
+    if (endDate) {
+      params.append('end_date', endDate);
     }
     return api.get<GraphData>(`/users/${encodeURIComponent(email)}/graph-data?${params.toString()}`);
   },
@@ -183,5 +212,16 @@ export const accountService = {
 export const leaderboardService = {
   async getLeaderboard(): Promise<LeaderboardEntry[]> {
     return api.get<LeaderboardEntry[]>('/leaderboard');
+  },
+};
+
+// Data Export/Import Services
+export const dataService = {
+  async exportData(email: string): Promise<UserDataExport> {
+    return api.get<UserDataExport>(`/users/${encodeURIComponent(email)}/export-data`);
+  },
+
+  async importData(email: string, importData: UserDataImport): Promise<ImportResult> {
+    return api.post<ImportResult>(`/users/${encodeURIComponent(email)}/import-data`, importData);
   },
 };

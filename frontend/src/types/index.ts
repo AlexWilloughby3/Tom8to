@@ -70,6 +70,16 @@ export interface CategoryUpdate {
   active: boolean;
 }
 
+export interface CategoryRename {
+  new_category: string;
+}
+
+export interface CategoryRenameResponse {
+  requires_merge: boolean;
+  target_exists: boolean;
+  message: string;
+}
+
 export interface GraphDataPoint {
   date: string;
   focus_time_seconds: number;
@@ -81,7 +91,7 @@ export interface GraphData {
   category?: string;
 }
 
-export type TimeRange = 'week' | 'month' | '6month' | 'ytd';
+export type TimeRange = 'week' | 'month' | '6month' | 'ytd' | 'custom';
 
 // New types for verification code and password management
 export interface VerificationCodeRequest {
@@ -106,4 +116,43 @@ export interface LeaderboardEntry {
   goals_completed_this_week: number;
   total_goals_this_week: number;
   goals_completed_all_time: number;
+}
+
+// Data export/import types
+export interface ExportedCategory {
+  category: string;
+  active: boolean;
+}
+
+export interface ExportedGoal {
+  category: string;
+  goal_time_per_week_seconds: number;
+}
+
+export interface ExportedSession {
+  time: string;  // ISO format datetime string
+  focus_time_seconds: number;
+  category: string;
+}
+
+export interface UserDataExport {
+  version: string;
+  export_date: string;  // ISO format datetime string
+  categories: ExportedCategory[];
+  goals: ExportedGoal[];
+  sessions: ExportedSession[];
+}
+
+export interface UserDataImport {
+  version: string;
+  categories: ExportedCategory[];
+  goals: ExportedGoal[];
+  sessions: ExportedSession[];
+}
+
+export interface ImportResult {
+  categories_imported: number;
+  goals_imported: number;
+  sessions_imported: number;
+  message: string;
 }
