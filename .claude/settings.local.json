@@ -31,7 +31,8 @@
       "Bash(docker-compose logs:*)",
       "Bash(docker exec:*)",
       "Bash(python -m py_compile:*)",
-      "Bash(python test_timezone_splitting.py:*)"
+      "Bash(python test_timezone_splitting.py:*)",
+      "Bash(docker ps:*)"
     ]
   }
 }
