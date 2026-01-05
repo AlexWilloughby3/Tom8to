@@ -946,10 +946,6 @@ def get_graph_data(
     )
     end_date_utc = timezone_utils.eastern_to_utc(end_date_eastern).replace(tzinfo=None)
 
-    print(
-        f"DEBUG: time_range={time_range}, start_date_eastern={start_date_eastern}, end_date_eastern={end_date_eastern}, group_by_week={group_by_week}"
-    )
-
     # Query focus sessions
     query = db.query(models.FocusInformation).filter(
         models.FocusInformation.email == email,
@@ -962,8 +958,6 @@ def get_graph_data(
         query = query.filter(models.FocusInformation.category == category)
 
     sessions = query.all()
-
-    print(f"DEBUG: Found {len(sessions)} sessions")
 
     # Group by day or week
     data_dict = {}
@@ -1002,10 +996,6 @@ def get_graph_data(
                 data_dict[day_key] = 0
             data_dict[day_key] += session.focus_time_seconds
 
-    print(
-        f"DEBUG: data_dict has {len(data_dict)} entries: {list(data_dict.keys())[:10]}"
-    )
-
     # Fill in missing dates with 0
     current = start_date_eastern.replace(hour=0, minute=0, second=0, microsecond=0)
     filled_data = {}
@@ -1015,14 +1005,9 @@ def get_graph_data(
         first_week_start = timezone_utils.get_eastern_week_start(current)
         current = first_week_start
 
-        print(
-            f"DEBUG: first_week_start={first_week_start}, end_date_eastern={end_date_eastern}"
-        )
-
         while current <= end_date_eastern:
             week_key = current.strftime("%Y-%m-%d")
             filled_data[week_key] = data_dict.get(week_key, 0)
-            print(f"DEBUG: Added week {week_key}, current={current}")
             current += timedelta(days=7)
     else:
         # Fill days
@@ -1031,15 +1016,11 @@ def get_graph_data(
             filled_data[day_key] = data_dict.get(day_key, 0)
             current += timedelta(days=1)
 
-    print(f"DEBUG: filled_data has {len(filled_data)} entries")
-
     # Convert to list of data points
     data_points = [
         schemas.GraphDataPoint(date=date, focus_time_seconds=seconds)
         for date, seconds in sorted(filled_data.items())
     ]
-
-    print(f"DEBUG: Returning {len(data_points)} data points")
 
     return schemas.GraphData(
         data_points=data_points, time_range=time_range, category=category
