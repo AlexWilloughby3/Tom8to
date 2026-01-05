@@ -97,144 +97,6 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* Category Progress */}
-      {weeklyStats && weeklyStats.categories.length > 0 && (
-        <div className="card">
-          <h2>Weekly Progress by Category</h2>
-          <div className="category-progress">
-            {weeklyStats.categories.map((cat) => {
-              // Calculate checkbox completion for progress bar
-              const dailyCompleted =
-                cat.daily_checkbox_goals?.reduce(
-                  (sum, goal) =>
-                    sum +
-                    (goal.completions?.filter((c) => c.completed).length || 0),
-                  0,
-                ) || 0;
-              const dailyTotal = (cat.daily_checkbox_goals?.length || 0) * 7;
-
-              const weeklyCompleted =
-                cat.weekly_checkbox_goals?.filter((g) => g.completed).length ||
-                0;
-              const weeklyTotal = cat.weekly_checkbox_goals?.length || 0;
-
-              const hasTimeGoal =
-                cat.goal_time_per_week_seconds !== undefined &&
-                cat.goal_time_per_week_seconds !== null;
-              const hasDailyGoals = dailyTotal > 0;
-              const hasWeeklyGoals = weeklyTotal > 0;
-
-              return (
-                <div key={cat.category} className="progress-item">
-                  <div className="progress-header">
-                    <span className="progress-category">{cat.category}</span>
-                  </div>
-
-                  {/* Time-based goal progress */}
-                  {hasTimeGoal && (
-                    <div
-                      style={{
-                        marginBottom:
-                          hasDailyGoals || hasWeeklyGoals ? "0.5rem" : "0",
-                      }}
-                    >
-                      <div
-                        className="progress-header"
-                        style={{ marginBottom: "0.25rem" }}
-                      >
-                        <span
-                          className="progress-time"
-                          style={{ fontSize: "0.9rem" }}
-                        >
-                          Time Goal: {formatDuration(cat.total_time_seconds)}
-                          <span className="progress-goal">
-                            {" / "}
-                            {formatDuration(cat.goal_time_per_week_seconds!)}
-                          </span>
-                        </span>
-                      </div>
-                      <div className="progress-bar">
-                        <div
-                          className="progress-fill"
-                          style={{
-                            width: `${Math.min(cat.progress_percentage || 0, 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Daily checkbox goal progress */}
-                  {hasDailyGoals && (
-                    <div
-                      style={{ marginBottom: hasWeeklyGoals ? "0.5rem" : "0" }}
-                    >
-                      <div
-                        className="progress-header"
-                        style={{ marginBottom: "0.25rem" }}
-                      >
-                        <span
-                          className="progress-time"
-                          style={{ fontSize: "0.9rem" }}
-                        >
-                          Daily Goals: {dailyCompleted}/{dailyTotal} completed
-                        </span>
-                      </div>
-                      <div className="progress-bar">
-                        <div
-                          className="progress-fill"
-                          style={{
-                            width: `${Math.min((dailyCompleted / dailyTotal) * 100, 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Weekly checkbox goal progress */}
-                  {hasWeeklyGoals && (
-                    <div>
-                      <div
-                        className="progress-header"
-                        style={{ marginBottom: "0.25rem" }}
-                      >
-                        <span
-                          className="progress-time"
-                          style={{ fontSize: "0.9rem" }}
-                        >
-                          Weekly Goals: {weeklyCompleted}/{weeklyTotal}{" "}
-                          completed
-                        </span>
-                      </div>
-                      <div className="progress-bar">
-                        <div
-                          className="progress-fill"
-                          style={{
-                            width: `${Math.min((weeklyCompleted / weeklyTotal) * 100, 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Fallback if no goals */}
-                  {!hasTimeGoal && !hasDailyGoals && !hasWeeklyGoals && (
-                    <div className="progress-header">
-                      <span className="progress-time">
-                        {formatDuration(cat.total_time_seconds)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Focus Time Graph */}
-          <FocusTimeGraph />
-        </div>
-      )}
-
       {/* Daily Checkbox Goals */}
       {weeklyStats &&
         weeklyStats.categories.some(
@@ -350,7 +212,6 @@ export default function Dashboard() {
                       >
                         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
                           (day, dayIdx) => {
-                            // Calculate the date for this day of the week in Eastern Time
                             const diff = dayIdx - etDayOfWeek;
                             const targetDate = new Date(
                               now.toLocaleString("en-US", {
@@ -496,6 +357,144 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+      {/* Category Progress */}
+      {weeklyStats && weeklyStats.categories.length > 0 && (
+        <div className="card">
+          <h2>Weekly Progress by Category</h2>
+          <div className="category-progress">
+            {weeklyStats.categories.map((cat) => {
+              // Calculate checkbox completion for progress bar
+              const dailyCompleted =
+                cat.daily_checkbox_goals?.reduce(
+                  (sum, goal) =>
+                    sum +
+                    (goal.completions?.filter((c) => c.completed).length || 0),
+                  0,
+                ) || 0;
+              const dailyTotal = (cat.daily_checkbox_goals?.length || 0) * 7;
+
+              const weeklyCompleted =
+                cat.weekly_checkbox_goals?.filter((g) => g.completed).length ||
+                0;
+              const weeklyTotal = cat.weekly_checkbox_goals?.length || 0;
+
+              const hasTimeGoal =
+                cat.goal_time_per_week_seconds !== undefined &&
+                cat.goal_time_per_week_seconds !== null;
+              const hasDailyGoals = dailyTotal > 0;
+              const hasWeeklyGoals = weeklyTotal > 0;
+
+              return (
+                <div key={cat.category} className="progress-item">
+                  <div className="progress-header">
+                    <span className="progress-category">{cat.category}</span>
+                  </div>
+
+                  {/* Time-based goal progress */}
+                  {hasTimeGoal && (
+                    <div
+                      style={{
+                        marginBottom:
+                          hasDailyGoals || hasWeeklyGoals ? "0.5rem" : "0",
+                      }}
+                    >
+                      <div
+                        className="progress-header"
+                        style={{ marginBottom: "0.25rem" }}
+                      >
+                        <span
+                          className="progress-time"
+                          style={{ fontSize: "0.9rem" }}
+                        >
+                          Time Goal: {formatDuration(cat.total_time_seconds)}
+                          <span className="progress-goal">
+                            {" / "}
+                            {formatDuration(cat.goal_time_per_week_seconds!)}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="progress-bar">
+                        <div
+                          className="progress-fill"
+                          style={{
+                            width: `${Math.min(cat.progress_percentage || 0, 100)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Daily checkbox goal progress */}
+                  {hasDailyGoals && (
+                    <div
+                      style={{ marginBottom: hasWeeklyGoals ? "0.5rem" : "0" }}
+                    >
+                      <div
+                        className="progress-header"
+                        style={{ marginBottom: "0.25rem" }}
+                      >
+                        <span
+                          className="progress-time"
+                          style={{ fontSize: "0.9rem" }}
+                        >
+                          Daily Goals: {dailyCompleted}/{dailyTotal} completed
+                        </span>
+                      </div>
+                      <div className="progress-bar">
+                        <div
+                          className="progress-fill"
+                          style={{
+                            width: `${Math.min((dailyCompleted / dailyTotal) * 100, 100)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Weekly checkbox goal progress */}
+                  {hasWeeklyGoals && (
+                    <div>
+                      <div
+                        className="progress-header"
+                        style={{ marginBottom: "0.25rem" }}
+                      >
+                        <span
+                          className="progress-time"
+                          style={{ fontSize: "0.9rem" }}
+                        >
+                          Weekly Goals: {weeklyCompleted}/{weeklyTotal}{" "}
+                          completed
+                        </span>
+                      </div>
+                      <div className="progress-bar">
+                        <div
+                          className="progress-fill"
+                          style={{
+                            width: `${Math.min((weeklyCompleted / weeklyTotal) * 100, 100)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Fallback if no goals */}
+                  {!hasTimeGoal && !hasDailyGoals && !hasWeeklyGoals && (
+                    <div className="progress-header">
+                      <span className="progress-time">
+                        {formatDuration(cat.total_time_seconds)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Focus Time Graph */}
+          <FocusTimeGraph />
+        </div>
+      )}
     </div>
   );
 }
