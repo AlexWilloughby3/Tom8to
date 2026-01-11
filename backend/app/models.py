@@ -13,6 +13,7 @@ class UserInformation(Base):
 
     email = Column(String(255), primary_key=True, index=True)
     password = Column(String(255), nullable=False)
+    display_name = Column(String(255), nullable=True)
     show_on_leaderboard = Column(Boolean, nullable=False, default=True)
 
     # Relationships
@@ -135,8 +136,12 @@ class CheckboxGoalCompletion(Base):
         nullable=False,
     )
     category = Column(String(255), primary_key=True, nullable=False)
-    goal_type = Column(String(50), primary_key=True, nullable=False)  # 'DAILY_CHECKBOX' or 'WEEKLY_CHECKBOX'
-    completion_date = Column(DateTime, primary_key=True, nullable=False)  # Midnight ET of the day/week in UTC
+    goal_type = Column(
+        String(50), primary_key=True, nullable=False
+    )  # 'DAILY_CHECKBOX' or 'WEEKLY_CHECKBOX'
+    completion_date = Column(
+        DateTime, primary_key=True, nullable=False
+    )  # Midnight ET of the day/week in UTC
     completed = Column(Boolean, nullable=False, default=False)
     completed_at = Column(DateTime, nullable=True)  # When user checked it off
 

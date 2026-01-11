@@ -11,6 +11,7 @@
 CREATE TABLE IF NOT EXISTS user_information (
     email VARCHAR(255) PRIMARY KEY,
     password VARCHAR(255) NOT NULL,
+    display_name VARCHAR(255),
     show_on_leaderboard BOOLEAN NOT NULL DEFAULT TRUE
 );
 
@@ -61,6 +62,19 @@ BEGIN
         WHERE table_name = 'user_information' AND column_name = 'show_on_leaderboard'
     ) THEN
         ALTER TABLE user_information ADD COLUMN show_on_leaderboard BOOLEAN NOT NULL DEFAULT TRUE;
+    END IF;
+END $$;
+
+-- Migration: Add display_name column if it doesn't exist (for existing databases)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'user_information' AND column_name = 'display_name'
+    ) THEN
+        ALTER TABLE user_information ADD COLUMN display_name VARCHAR(255);
+        -- Set default display_name to email for existing users
+        UPDATE user_information SET display_name = email WHERE display_name IS NULL;
     END IF;
 END $$;
 

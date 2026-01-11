@@ -41,7 +41,11 @@ def get_user(db: Session, email: str) -> Optional[models.UserInformation]:
 def create_user(db: Session, user: schemas.UserCreate) -> models.UserInformation:
     """Create a new user with hashed password"""
     hashed_password = hash_password(user.password)
-    db_user = models.UserInformation(email=user.email, password=hashed_password)
+    db_user = models.UserInformation(
+        email=user.email,
+        password=hashed_password,
+        display_name=user.email,  # Default display name to email
+    )
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
@@ -84,7 +88,10 @@ def update_user(
     """Update user settings"""
     db_user = get_user(db, email)
     if db_user:
-        db_user.show_on_leaderboard = user_update.show_on_leaderboard
+        if user_update.show_on_leaderboard is not None:
+            db_user.show_on_leaderboard = user_update.show_on_leaderboard
+        if user_update.display_name is not None:
+            db_user.display_name = user_update.display_name
         db.commit()
         db.refresh(db_user)
         return db_user
@@ -1474,6 +1481,8 @@ def get_leaderboard_data(db: Session) -> List[schemas.LeaderboardEntry]:
         leaderboard.append(
             schemas.LeaderboardEntry(
                 email=email,
+                display_name=user.display_name
+                or email,  # Fallback to email if display_name is None
                 focus_hours_this_week=round(focus_hours_this_week, 2),
                 focus_hours_all_time=round(focus_hours_all_time, 2),
                 goals_completed_this_week=goals_completed_this_week,

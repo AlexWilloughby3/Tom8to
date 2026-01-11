@@ -1,12 +1,14 @@
-export type GoalType = 'TIME_BASED' | 'DAILY_CHECKBOX' | 'WEEKLY_CHECKBOX';
+export type GoalType = "TIME_BASED" | "DAILY_CHECKBOX" | "WEEKLY_CHECKBOX";
 
 export interface User {
   email: string;
+  display_name?: string;
   show_on_leaderboard: boolean;
 }
 
 export interface UserUpdate {
-  show_on_leaderboard: boolean;
+  show_on_leaderboard?: boolean;
+  display_name?: string;
 }
 
 export interface FocusSession {
@@ -122,7 +124,7 @@ export interface GraphData {
   category?: string;
 }
 
-export type TimeRange = 'week' | 'month' | '6month' | 'ytd' | 'custom';
+export type TimeRange = "week" | "month" | "6month" | "ytd" | "custom";
 
 // New types for verification code and password management
 export interface VerificationCodeRequest {
@@ -142,6 +144,7 @@ export interface PasswordChangeRequest {
 // Leaderboard types
 export interface LeaderboardEntry {
   email: string;
+  display_name: string;
   focus_hours_this_week: number;
   focus_hours_all_time: number;
   goals_completed_this_week: number;
@@ -165,14 +168,14 @@ export interface ExportedGoal {
 }
 
 export interface ExportedSession {
-  time: string;  // ISO format datetime string
+  time: string; // ISO format datetime string
   focus_time_seconds: number;
   category: string;
 }
 
 export interface UserDataExport {
   version: string;
-  export_date: string;  // ISO format datetime string
+  export_date: string; // ISO format datetime string
   categories: ExportedCategory[];
   goals: ExportedGoal[];
   sessions: ExportedSession[];
