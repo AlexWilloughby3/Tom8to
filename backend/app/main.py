@@ -18,72 +18,79 @@ models.Base.metadata.create_all(bind=engine)
 # Lightweight schema migration: ensure timezone column exists on existing DBs.
 # create_all only creates missing tables; it does not add new columns. All
 # existing rows are backfilled to America/New_York to preserve current semantics.
-with engine.begin() as _conn:
-    _conn.execute(
-        text(
-            "ALTER TABLE user_information "
-            "ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) "
-            "NOT NULL DEFAULT 'America/New_York'"
+# Postgres-only syntax (IF NOT EXISTS / DO blocks) — skip on SQLite, which CI
+# uses for a disposable, freshly-created-by-create_all() database that
+# already has every column from the current models, so there's nothing to
+# retrofit there anyway.
+if engine.dialect.name == "postgresql":
+    with engine.begin() as _conn:
+        _conn.execute(
+            text(
+                "ALTER TABLE user_information "
+                "ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) "
+                "NOT NULL DEFAULT 'America/New_York'"
+            )
         )
-    )
-    # Per-session tz: each focus_information row records the tz the user was
-    # in when it was logged, so bucketing into local days/weeks pins to that
-    # calendar rather than the user's *current* tz. Backfill from the
-    # owning user's stored timezone — best-effort guess for pre-existing rows.
-    _conn.execute(
-        text(
-            "ALTER TABLE focus_information "
-            "ADD COLUMN IF NOT EXISTS tz VARCHAR(64) "
-            "NOT NULL DEFAULT 'America/New_York'"
+        # Per-session tz: each focus_information row records the tz the user
+        # was in when it was logged, so bucketing into local days/weeks pins
+        # to that calendar rather than the user's *current* tz. Backfill from
+        # the owning user's stored timezone — best-effort guess for
+        # pre-existing rows.
+        _conn.execute(
+            text(
+                "ALTER TABLE focus_information "
+                "ADD COLUMN IF NOT EXISTS tz VARCHAR(64) "
+                "NOT NULL DEFAULT 'America/New_York'"
+            )
         )
-    )
-    _conn.execute(
-        text(
-            "UPDATE focus_information AS f "
-            "SET tz = u.timezone "
-            "FROM user_information AS u "
-            "WHERE f.email = u.email "
-            "AND f.tz = 'America/New_York' "
-            "AND u.timezone <> 'America/New_York'"
+        _conn.execute(
+            text(
+                "UPDATE focus_information AS f "
+                "SET tz = u.timezone "
+                "FROM user_information AS u "
+                "WHERE f.email = u.email "
+                "AND f.tz = 'America/New_York' "
+                "AND u.timezone <> 'America/New_York'"
+            )
         )
-    )
-    # focus_goal_information predates the daily/weekly checkbox goals feature,
-    # which added goal_type as part of the primary key (was just email+category)
-    # and made goal_time_per_week_seconds optional (checkbox goals don't use it).
-    # Existing rows are pre-checkbox-feature TIME_BASED goals, so backfill as such.
-    _conn.execute(
-        text(
-            "ALTER TABLE focus_goal_information "
-            "ALTER COLUMN goal_time_per_week_seconds DROP NOT NULL"
+        # focus_goal_information predates the daily/weekly checkbox goals
+        # feature, which added goal_type as part of the primary key (was
+        # just email+category) and made goal_time_per_week_seconds optional
+        # (checkbox goals don't use it). Existing rows are pre-checkbox-
+        # feature TIME_BASED goals, so backfill as such.
+        _conn.execute(
+            text(
+                "ALTER TABLE focus_goal_information "
+                "ALTER COLUMN goal_time_per_week_seconds DROP NOT NULL"
+            )
         )
-    )
-    _conn.execute(
-        text(
-            "ALTER TABLE focus_goal_information "
-            "ADD COLUMN IF NOT EXISTS description VARCHAR(255)"
+        _conn.execute(
+            text(
+                "ALTER TABLE focus_goal_information "
+                "ADD COLUMN IF NOT EXISTS description VARCHAR(255)"
+            )
         )
-    )
-    _conn.execute(
-        text(
-            """
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_name = 'focus_goal_information'
-                    AND column_name = 'goal_type'
-                ) THEN
-                    ALTER TABLE focus_goal_information
-                        ADD COLUMN goal_type VARCHAR(50) NOT NULL DEFAULT 'TIME_BASED';
-                    ALTER TABLE focus_goal_information
-                        DROP CONSTRAINT focus_goal_information_pkey;
-                    ALTER TABLE focus_goal_information
-                        ADD PRIMARY KEY (email, category, goal_type);
-                END IF;
-            END $$;
-            """
+        _conn.execute(
+            text(
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'focus_goal_information'
+                        AND column_name = 'goal_type'
+                    ) THEN
+                        ALTER TABLE focus_goal_information
+                            ADD COLUMN goal_type VARCHAR(50) NOT NULL DEFAULT 'TIME_BASED';
+                        ALTER TABLE focus_goal_information
+                            DROP CONSTRAINT focus_goal_information_pkey;
+                        ALTER TABLE focus_goal_information
+                            ADD PRIMARY KEY (email, category, goal_type);
+                    END IF;
+                END $$;
+                """
+            )
         )
-    )
 
 app = FastAPI(
     title="Focus Tracker API",

@@ -37,7 +37,11 @@ jobs:
 
       - name: Backend install
         working-directory: backend
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          # pytest/httpx are test-only — kept out of requirements.txt so the
+          # prod image (built from that file) doesn't carry them.
+          pip install pytest httpx
 
       - name: Backend timezone tests
         working-directory: backend
