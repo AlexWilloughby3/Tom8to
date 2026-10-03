@@ -74,6 +74,16 @@ gcloud artifacts repositories add-iam-policy-binding "$REPO_NAME" \
   --member="serviceAccount:${SA_EMAIL}" \
   --role="roles/artifactregistry.writer" >/dev/null
 
+# The VM pulls images as its *own* attached service account, which is a
+# different identity from the CI deployer above — it needs read access or
+# `docker compose pull` fails on the VM even though the push succeeded.
+VM_SA="$(gcloud compute instances describe "$VM_NAME" --zone="$ZONE" \
+  --format='value(serviceAccounts[0].email)')"
+gcloud artifacts repositories add-iam-policy-binding "$REPO_NAME" \
+  --location="$REGION" \
+  --member="serviceAccount:${VM_SA}" \
+  --role="roles/artifactregistry.reader" >/dev/null
+
 for ROLE in roles/iap.tunnelResourceAccessor roles/compute.viewer roles/compute.osAdminLogin; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:${SA_EMAIL}" \
@@ -81,8 +91,18 @@ for ROLE in roles/iap.tunnelResourceAccessor roles/compute.viewer roles/compute.
     --condition=None >/dev/null
 done
 
-VM_SA="$(gcloud compute instances describe "$VM_NAME" --zone="$ZONE" \
-  --format='value(serviceAccounts[0].email)')"
+# roles/compute.osAdminLogin only grants sudo through OS Login's own SSH-key
+# flow — without OS Login switched on, gcloud instead falls back to writing
+# SSH keys straight into instance/project metadata, which this SA has no
+# permission to do (and shouldn't need).
+CURRENT_OSLOGIN="$(gcloud compute instances describe "$VM_NAME" --zone="$ZONE" \
+  --format='value(metadata.items.filter("key:enable-oslogin").extract("value").flatten())' 2>/dev/null)"
+if [[ "$CURRENT_OSLOGIN" != "TRUE" ]]; then
+  gcloud compute instances add-metadata "$VM_NAME" --zone="$ZONE" --metadata=enable-oslogin=TRUE
+else
+  echo "OS Login already enabled on $VM_NAME, skipping"
+fi
+
 gcloud iam service-accounts add-iam-policy-binding "$VM_SA" \
   --member="serviceAccount:${SA_EMAIL}" \
   --role="roles/iam.serviceAccountUser" >/dev/null
@@ -159,9 +179,16 @@ GCP_REGION     = ${REGION}
 GCP_ZONE       = ${ZONE}
 GCP_WIF_PROVIDER = projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/providers/${PROVIDER_ID}
 GCP_DEPLOY_SA  = ${SA_EMAIL}
-
-NOT done automatically (do this only after confirming
-'gcloud compute ssh ${VM_NAME} --zone=${ZONE} --tunnel-through-iap' works):
-  gcloud compute firewall-rules delete default-allow-ssh default-allow-rdp
-These currently leave SSH/RDP open to the whole internet on tom8tovm.
 EOF
+
+# Deleting these is left manual on purpose: closing them before confirming the
+# IAP path works can lock you out of the VM entirely.
+if gcloud compute firewall-rules describe default-allow-ssh >/dev/null 2>&1 ||
+   gcloud compute firewall-rules describe default-allow-rdp >/dev/null 2>&1; then
+  cat <<EOF
+
+NOT done automatically — SSH/RDP are still open to the whole internet.
+Once 'gcloud compute ssh ${VM_NAME} --zone=${ZONE} --tunnel-through-iap' works:
+  gcloud compute firewall-rules delete default-allow-ssh default-allow-rdp
+EOF
+fi

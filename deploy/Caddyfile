@@ -4,11 +4,22 @@
 	@assets path /assets/*
 	header @assets Cache-Control "public, max-age=31536000, immutable"
 
-	reverse_proxy /api/* api:8000
+	# These must be `handle` blocks, not bare directives. Caddy ignores the
+	# order directives are written in and applies its own, in which try_files
+	# (a rewrite) runs *before* reverse_proxy — so a bare layout rewrites
+	# /api/health to /index.html first, the /api/* proxy matcher then misses,
+	# and every API call silently returns the SPA's HTML instead of JSON.
+	# `handle` blocks are mutually exclusive: the first match wins and scopes
+	# its directives, keeping try_files away from /api/*.
+	handle /api/* {
+		reverse_proxy api:8000
+	}
 
-	root * /srv
-	file_server
-	try_files {path} /index.html
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
 }
 
 # Once alex-ware.com / www.alex-ware.com DNS point at this VM, uncomment to

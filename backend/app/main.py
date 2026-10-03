@@ -12,6 +12,23 @@ from datetime import datetime, timedelta
 from . import models, schemas, crud, email_service, timezone_utils, user_context
 from .database import SessionLocal, engine, get_db
 
+# Schema setup runs at import time, and uvicorn runs this module in several
+# worker processes, so every worker races to create the same tables. Postgres
+# catches the collision as a duplicate key on pg_type and the losing worker
+# dies during startup (uvicorn restarts it and the retry is a no-op, so it
+# self-heals, but it dumps a traceback and briefly runs under capacity). The
+# DO block below is worse: concurrent workers can both pass its "does
+# goal_type exist" check and then both try to add the primary key.
+#
+# An advisory lock serialises the whole section — the first worker in does the
+# work while the others wait, then find there is nothing left to do. It's held
+# on its own connection until the section finishes; if a worker crashes
+# mid-migration, Postgres drops the lock when that connection closes.
+_schema_lock = engine.connect() if engine.dialect.name == "postgresql" else None
+if _schema_lock is not None:
+    _schema_lock.execute(text("SELECT pg_advisory_lock(8675309)"))
+    _schema_lock.commit()
+
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
 
@@ -91,6 +108,11 @@ if engine.dialect.name == "postgresql":
                 """
             )
         )
+
+if _schema_lock is not None:
+    _schema_lock.execute(text("SELECT pg_advisory_unlock(8675309)"))
+    _schema_lock.commit()
+    _schema_lock.close()
 
 app = FastAPI(
     title="Focus Tracker API",
