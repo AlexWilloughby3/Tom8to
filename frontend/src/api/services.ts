@@ -1,4 +1,5 @@
 import { api } from './client';
+import { toNaiveUtc } from '../utils/calendar';
 import type {
   User,
   UserUpdate,
@@ -6,6 +7,7 @@ import type {
   RegisterData,
   FocusSession,
   FocusSessionCreate,
+  FocusSessionCreateWithTime,
   FocusGoal,
   FocusGoalCreate,
   GoalType,
@@ -70,10 +72,36 @@ export const authService = {
   },
 };
 
+// Sessions are keyed by end time, so two can't end at the same instant
+export class SessionTimeConflictError extends Error {
+  constructor() {
+    super('A session already ends at exactly that time');
+    this.name = 'SessionTimeConflictError';
+  }
+}
+
 // Focus Session Services
 export const focusSessionService = {
   async createSession(email: string, data: FocusSessionCreate): Promise<FocusSession> {
     return api.post<FocusSession>(`/users/${encodeURIComponent(email)}/focus-sessions`, data);
+  },
+
+  async createSessionWithTime(email: string, data: FocusSessionCreateWithTime): Promise<FocusSession> {
+    return api.post<FocusSession>(`/users/${encodeURIComponent(email)}/focus-sessions/with-time`, data);
+  },
+
+  // Logs a session ending at endTime, refusing if one already ends then
+  async createSessionEndingAt(email: string, data: FocusSessionCreate, endTime: Date): Promise<FocusSession> {
+    const endUtc = toNaiveUtc(endTime);
+    const existing = await focusSessionService.getSessions(email, {
+      start_date: endUtc,
+      end_date: endUtc,
+      limit: 1,
+    });
+    if (existing.length > 0) {
+      throw new SessionTimeConflictError();
+    }
+    return focusSessionService.createSessionWithTime(email, { ...data, time: endTime.toISOString() });
   },
 
   async getSessions(

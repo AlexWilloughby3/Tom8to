@@ -1,7 +1,7 @@
 import { useAuth } from '../contexts/AuthContext';
 import { usePomodoro } from '../contexts/PomodoroContext';
 import { formatTime } from '../utils/formatters';
-import { focusSessionService } from '../api/services';
+import { focusSessionService, SessionTimeConflictError } from '../api/services';
 import { useState, FormEvent, useEffect } from 'react';
 import './Timer.css';
 
@@ -57,6 +57,9 @@ export default function Timer() {
   const [manualCategory, setManualCategory] = useState('');
   const [manualCustomCategory, setManualCustomCategory] = useState('');
   const [showManualCustom, setShowManualCustom] = useState(false);
+  // Both blank means the session ended at the moment it's logged
+  const [manualEndDate, setManualEndDate] = useState('');
+  const [manualEndTime, setManualEndTime] = useState('');
   const [manualMessage, setManualMessage] = useState('');
   const [manualError, setManualError] = useState('');
 
@@ -99,11 +102,38 @@ export default function Timer() {
       return;
     }
 
+    let endTime: Date | null = null;
+    if (manualEndDate || manualEndTime) {
+      if (!manualEndDate || !manualEndTime) {
+        setManualError('Please enter both an end date and an end time, or leave both empty to use the current time');
+        return;
+      }
+
+      endTime = new Date(`${manualEndDate}T${manualEndTime}`);
+      if (isNaN(endTime.getTime())) {
+        setManualError('Please enter a valid end date and time');
+        return;
+      }
+
+      if (endTime.getTime() > Date.now()) {
+        setManualError('End time cannot be in the future');
+        return;
+      }
+    }
+
     try {
-      await focusSessionService.createSession(user.email, {
-        category: categoryToUse,
-        focus_time_seconds: totalSeconds,
-      });
+      if (endTime) {
+        await focusSessionService.createSessionEndingAt(
+          user.email,
+          { category: categoryToUse, focus_time_seconds: totalSeconds },
+          endTime
+        );
+      } else {
+        await focusSessionService.createSession(user.email, {
+          category: categoryToUse,
+          focus_time_seconds: totalSeconds,
+        });
+      }
 
       const displayHours = hours > 0 ? `${hours}h` : '';
       const displayMinutes = minutes > 0 ? `${minutes}m` : '';
@@ -115,7 +145,13 @@ export default function Timer() {
       setManualCategory('');
       setManualCustomCategory('');
       setShowManualCustom(false);
+      setManualEndDate('');
+      setManualEndTime('');
     } catch (err) {
+      if (err instanceof SessionTimeConflictError) {
+        setManualError('A session already ends at exactly that time. Please pick a different end time.');
+        return;
+      }
       setManualError('Failed to log time. Please try again.');
       console.error(err);
     }
@@ -453,6 +489,37 @@ export default function Timer() {
               </div>
             </div>
           </div>
+
+          <div className="form-group">
+            <label htmlFor="manualEndDate">Ended At (optional)</label>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <div style={{ flex: 1 }}>
+                <input
+                  id="manualEndDate"
+                  type="date"
+                  className="input"
+                  value={manualEndDate}
+                  onChange={(e) => setManualEndDate(e.target.value)}
+                  aria-label="End date"
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <input
+                  id="manualEndTime"
+                  type="time"
+                  step={60}
+                  className="input"
+                  value={manualEndTime}
+                  onChange={(e) => setManualEndTime(e.target.value)}
+                  aria-label="End time"
+                />
+              </div>
+            </div>
+          </div>
+
+          <p className="manual-entry-description">
+            Leave the end date and time empty if you just finished; the current time is used.
+          </p>
 
           {manualMessage && <div className="success">{manualMessage}</div>}
           {manualError && <div className="error">{manualError}</div>}

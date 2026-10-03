@@ -9,6 +9,7 @@ import {
   notifyBreakPeriodComplete,
   notifyAllCyclesComplete
 } from '../utils/soundNotifications';
+import { mergeShortStretches, totalSeconds, type Stretch } from '../utils/stretches';
 
 interface PomodoroContextType {
   categories: Category[];
@@ -82,6 +83,10 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
   const [pomodoroMessage, setPomodoroMessage] = useState('');
   const [pomodoroError, setPomodoroError] = useState('');
   const pomodoroIntervalRef = useRef<number | null>(null);
+  // Finished work stretches awaiting save, and the countdown value at which
+  // the current work stretch began (null while paused or on a break)
+  const pomodoroStretchesRef = useRef<Stretch[]>([]);
+  const pomodoroStretchOpenAtRef = useRef<number | null>(null);
 
   // Stopwatch state
   const [stopwatchRunning, setStopwatchRunning] = useState(false);
@@ -92,6 +97,9 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
   const [stopwatchMessage, setStopwatchMessage] = useState('');
   const [stopwatchError, setStopwatchError] = useState('');
   const stopwatchIntervalRef = useRef<number | null>(null);
+  // Same as the Pomodoro refs, but openAt is the elapsed value at start/resume
+  const stopwatchStretchesRef = useRef<Stretch[]>([]);
+  const stopwatchStretchOpenAtRef = useRef<number | null>(null);
 
   // Load categories when user changes
   useEffect(() => {
@@ -121,6 +129,43 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
   const getWorkDuration = () => (typeof workDuration === 'number' ? workDuration : 25);
   const getBreakDuration = () => (typeof breakDuration === 'number' ? breakDuration : 5);
   const getCycles = () => (typeof cycles === 'number' ? cycles : 4);
+
+  // Saves one session per stretch, oldest first. Each stretch is removed once
+  // saved, so a retry after a failure only sends what's left.
+  const saveStretches = async (
+    email: string,
+    category: string,
+    stretchesRef: { current: Stretch[] }
+  ) => {
+    stretchesRef.current = mergeShortStretches(stretchesRef.current);
+    while (stretchesRef.current.length > 0) {
+      const stretch = stretchesRef.current[0];
+      await focusSessionService.createSessionWithTime(email, {
+        category,
+        focus_time_seconds: stretch.seconds,
+        time: new Date(stretch.end).toISOString(),
+      });
+      stretchesRef.current = stretchesRef.current.slice(1);
+    }
+  };
+
+  const closePomodoroStretch = (secondsRemaining: number) => {
+    const openAt = pomodoroStretchOpenAtRef.current;
+    if (openAt === null) return;
+    pomodoroStretchOpenAtRef.current = null;
+    if (openAt - secondsRemaining > 0) {
+      pomodoroStretchesRef.current.push({ end: Date.now(), seconds: openAt - secondsRemaining });
+    }
+  };
+
+  const closeStopwatchStretch = () => {
+    const openAt = stopwatchStretchOpenAtRef.current;
+    if (openAt === null) return;
+    stopwatchStretchOpenAtRef.current = null;
+    if (stopwatchSeconds - openAt > 0) {
+      stopwatchStretchesRef.current.push({ end: Date.now(), seconds: stopwatchSeconds - openAt });
+    }
+  };
 
   // Pomodoro timer effect
   useEffect(() => {
@@ -165,6 +210,7 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
         setCurrentCycle(currentCycle + 1);
         setIsBreak(false);
         setPomodoroSeconds(getWorkDuration() * 60);
+        pomodoroStretchOpenAtRef.current = getWorkDuration() * 60;
       } else {
         // All cycles complete, save session
         playCompletionSound();
@@ -173,6 +219,7 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
       }
     } else {
       // Work period finished
+      closePomodoroStretch(0);
       setTotalWorkTime(totalWorkTime + getWorkDuration() * 60);
 
       if (currentCycle < getCycles()) {
@@ -192,6 +239,9 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
 
   const handlePomodoroSave = async () => {
     setPomodoroRunning(false);
+    // Close the work stretch in progress, if any; each stretch is saved as its
+    // own session so breaks and pauses aren't counted as focus time
+    closePomodoroStretch(pomodoroSeconds);
 
     if (!user) return;
 
@@ -202,15 +252,10 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Calculate actual time worked: total completed work + current work session progress
-    const currentWorkProgress = isBreak ? 0 : (getWorkDuration() * 60 - pomodoroSeconds);
-    const finalWorkTime = totalWorkTime + currentWorkProgress;
+    const finalWorkTime = totalSeconds(pomodoroStretchesRef.current);
 
     try {
-      await focusSessionService.createSession(user.email, {
-        category: selectedCategory,
-        focus_time_seconds: finalWorkTime,
-      });
+      await saveStretches(user.email, selectedCategory, pomodoroStretchesRef);
 
       setPomodoroMessage(`Pomodoro complete! ${formatTime(finalWorkTime)} in ${selectedCategory}`);
 
@@ -232,14 +277,20 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
     setIsBreak(false);
     setTotalWorkTime(0);
     setPomodoroSeconds(getWorkDuration() * 60);
+    pomodoroStretchesRef.current = [];
+    pomodoroStretchOpenAtRef.current = getWorkDuration() * 60;
   };
 
   const handlePomodoroPause = () => {
     setPomodoroRunning(false);
+    closePomodoroStretch(pomodoroSeconds);
   };
 
   const handlePomodoroResume = () => {
     setPomodoroRunning(true);
+    if (!isBreak) {
+      pomodoroStretchOpenAtRef.current = pomodoroSeconds;
+    }
   };
 
   const handlePomodoroReset = () => {
@@ -248,6 +299,8 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
     setCurrentCycle(1);
     setIsBreak(false);
     setTotalWorkTime(0);
+    pomodoroStretchesRef.current = [];
+    pomodoroStretchOpenAtRef.current = null;
   };
 
   const handlePomodoroCategoryChange = (value: string) => {
@@ -294,10 +347,12 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
     setStopwatchRunning(true);
     setStopwatchMessage('');
     setStopwatchError('');
+    stopwatchStretchOpenAtRef.current = stopwatchSeconds;
   };
 
   const handleStopwatchPause = () => {
     setStopwatchRunning(false);
+    closeStopwatchStretch();
   };
 
   const handleStopwatchReset = () => {
@@ -305,10 +360,13 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
     setStopwatchSeconds(0);
     setStopwatchMessage('');
     setStopwatchError('');
+    stopwatchStretchesRef.current = [];
+    stopwatchStretchOpenAtRef.current = null;
   };
 
   const handleStopwatchSave = async () => {
     setStopwatchRunning(false);
+    closeStopwatchStretch();
 
     if (stopwatchSeconds === 0) {
       setStopwatchError('Timer must run for at least 1 second');
@@ -324,19 +382,21 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    try {
-      await focusSessionService.createSession(user.email, {
-        category: selectedCategory,
-        focus_time_seconds: stopwatchSeconds,
-      });
+    const savedSeconds = totalSeconds(stopwatchStretchesRef.current);
 
-      setStopwatchMessage(`Focus session saved! ${formatTime(stopwatchSeconds)} in ${selectedCategory}`);
+    try {
+      await saveStretches(user.email, selectedCategory, stopwatchStretchesRef);
+
+      setStopwatchMessage(`Focus session saved! ${formatTime(savedSeconds)} in ${selectedCategory}`);
       setStopwatchSeconds(0);
       setStopwatchError('');
 
       // Reload categories in case a new custom category was created
       await loadCategories();
     } catch (err) {
+      // Stretches saved before the failure are already logged; keep only the
+      // unsaved time on the clock so a retry doesn't double-count
+      setStopwatchSeconds(totalSeconds(stopwatchStretchesRef.current));
       setStopwatchError('Failed to save focus session. Please try again.');
       console.error(err);
     }

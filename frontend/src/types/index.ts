@@ -72,6 +72,10 @@ export interface FocusSessionCreate {
   focus_time_seconds: number;
 }
 
+export interface FocusSessionCreateWithTime extends FocusSessionCreate {
+  time: string; // ISO datetime the session ended at
+}
+
 export interface FocusGoalCreate {
   category: string;
   goal_type: GoalType;

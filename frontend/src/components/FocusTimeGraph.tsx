@@ -15,6 +15,7 @@ export default function FocusTimeGraph() {
   const [loading, setLoading] = useState(false);
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   useEffect(() => {
     loadGraphData();
@@ -39,6 +40,7 @@ export default function FocusTimeGraph() {
         timeRange === 'custom' ? customEndDate : undefined
       );
       setGraphData(data);
+      setHoveredIndex(null);
     } catch (error) {
       console.error('Failed to load graph data:', error);
     } finally {
@@ -91,6 +93,19 @@ export default function FocusTimeGraph() {
   }
 
   const maxValue = getMaxValue();
+
+  // Long ranges come back as one point per week; tell from the spacing, since
+  // the server decides (a long custom range is weekly, an early-year YTD is daily)
+  const dayGap = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
+  const groupedByWeek =
+    !!graphData &&
+    graphData.data_points.length > 1 &&
+    dayGap(graphData.data_points[0].date, graphData.data_points[1].date) === 7;
+
+  const formatHours = (seconds: number) => {
+    const hours = Math.round((seconds / 3600) * 100) / 100;
+    return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+  };
 
   return (
     <div className="focus-time-graph">
@@ -204,18 +219,23 @@ export default function FocusTimeGraph() {
                   const x = (index / (graphData.data_points.length - 1 || 1)) * 800;
                   const y = 380 - ((point.focus_time_seconds / maxValue) * 380);
                   return (
-                    <circle
+                    <g
                       key={`dot-${index}`}
-                      cx={x}
-                      cy={y}
-                      r="5"
-                      fill="#c23838"
-                      stroke="white"
-                      strokeWidth="2"
-                      className="graph-dot"
+                      onMouseEnter={() => setHoveredIndex(index)}
+                      onMouseLeave={() => setHoveredIndex(null)}
                     >
-                      <title>{`${formatDate(point.date)}: ${formatDuration(point.focus_time_seconds)}`}</title>
-                    </circle>
+                      {/* Larger invisible target so the dot is easy to hover */}
+                      <circle cx={x} cy={y} r="14" fill="transparent" />
+                      <circle
+                        cx={x}
+                        cy={y}
+                        r={hoveredIndex === index ? 7 : 5}
+                        fill="#c23838"
+                        stroke="white"
+                        strokeWidth="2"
+                        className="graph-dot"
+                      />
+                    </g>
                   );
                 })}
 
@@ -238,6 +258,29 @@ export default function FocusTimeGraph() {
                     </text>
                   );
                 })}
+
+                {/* Hover tooltip, drawn last so it sits above the line and labels */}
+                {hoveredIndex !== null && graphData.data_points[hoveredIndex] && (() => {
+                  const point = graphData.data_points[hoveredIndex];
+                  const x = (hoveredIndex / (graphData.data_points.length - 1 || 1)) * 800;
+                  const y = 380 - ((point.focus_time_seconds / maxValue) * 380);
+                  const width = 190;
+                  const height = 50;
+                  // Keep the box inside the chart: clamp sideways, flip below near the top
+                  const boxX = Math.min(Math.max(x - width / 2, 0), 800 - width);
+                  const boxY = y - height - 14 < 0 ? y + 14 : y - height - 14;
+                  return (
+                    <g className="graph-tooltip" pointerEvents="none">
+                      <rect x={boxX} y={boxY} width={width} height={height} rx="6" fill="#333" />
+                      <text x={boxX + width / 2} y={boxY + 20} textAnchor="middle" fontSize="12" fill="#ccc">
+                        {groupedByWeek ? `Week of ${formatDate(point.date)}` : formatDate(point.date)}
+                      </text>
+                      <text x={boxX + width / 2} y={boxY + 39} textAnchor="middle" fontSize="14" fontWeight="600" fill="#fff">
+                        {`${formatHours(point.focus_time_seconds)} (${formatDuration(point.focus_time_seconds)})`}
+                      </text>
+                    </g>
+                  );
+                })()}
               </g>
             </svg>
           </div>

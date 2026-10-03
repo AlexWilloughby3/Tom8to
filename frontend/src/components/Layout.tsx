@@ -29,6 +29,7 @@ export default function Layout() {
     { path: '/', label: 'Dashboard' },
     { path: '/timer', label: 'Timer' },
     { path: '/goals', label: 'Goals' },
+    { path: '/calendar', label: 'Calendar' },
     { path: '/leaderboard', label: 'Leaderboard' },
     { path: '/settings', label: 'Settings' },
   ];
