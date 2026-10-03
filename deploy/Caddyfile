@@ -21,9 +21,3 @@
 		file_server
 	}
 }
-
-# Once alex-ware.com / www.alex-ware.com DNS point at this VM, uncomment to
-# redirect the apex and www to the tomato subdomain:
-# alex-ware.com, www.alex-ware.com {
-# 	redir https://{$DOMAIN}{uri} permanent
-# }
