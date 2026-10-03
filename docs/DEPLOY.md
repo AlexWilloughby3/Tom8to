@@ -6,8 +6,11 @@ One GCP VM (`tom8tovm`, e2-medium, `us-central1-a`) runs three containers via
 Docker Compose:
 
 - **web** — Caddy, serving the built frontend as static files and reverse-
-  proxying `/api/*` to the api container. Caddy handles Let's Encrypt TLS
-  automatically for `DOMAIN`.
+  proxying `/api/*` to the api container. Plain HTTP, no published ports.
+- **cloudflared** — Cloudflare Tunnel. Dials out to Cloudflare and carries
+  all public traffic to `web`. TLS terminates at Cloudflare's edge, so there
+  are no certificates on the VM and no inbound 80/443 in the firewall — the
+  VM's IP never appears in DNS and nothing answers on it.
 - **api** — FastAPI, built from `backend/Dockerfile`.
 - **db** — Postgres 16, data on the `pgdata` named volume. Not exposed
   outside the VM.
@@ -31,10 +34,9 @@ Tom8to and vice versa).
    ```
    This creates the Artifact Registry repo, a dedicated
    `tom8to-deploy` service account, a WIF provider scoped to
-   `AlexWilloughby3/Tom8to`, firewall rules for 80/443 and IAP-only SSH, a
-   static IP (promoted from the VM's existing ephemeral address — point DNS
-   at the IP it prints), and a weekly snapshot schedule. It's idempotent —
-   safe to re-run.
+   `AlexWilloughby3/Tom8to`, an IAP-only SSH firewall rule, a static IP
+   (promoted from the VM's existing ephemeral address), and a weekly
+   snapshot schedule. It's idempotent — safe to re-run.
 2. Add the five printed values as **repo variables** (not secrets) under
    GitHub Settings → Secrets and variables → Actions → Variables:
    `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_ZONE`, `GCP_WIF_PROVIDER`,
@@ -54,7 +56,8 @@ Tom8to and vice versa).
    separate `pg_dump`-to-bucket backup (deliberately dropped for now; add
    one later if you want point-in-time restores narrower than a week).
 5. Create `/opt/tom8to/.env` on the VM (mode 600) from `deploy/env.example`,
-   filling in real `POSTGRES_PASSWORD` and `SMTP_*` values.
+   filling in real `POSTGRES_PASSWORD`, `SMTP_*` and `TUNNEL_TOKEN` values
+   (see "Cloudflare Tunnel" below for the token).
 6. Push to `main` (or run the workflow manually) for the first deploy.
 
 ## Migrating data from the old AWS EC2 box
@@ -74,12 +77,31 @@ gunzip -c tom8to.sql.gz | docker compose exec -T db psql -U postgres -d app_db
 docker compose start api
 ```
 
-## DNS cutover
+## Cloudflare Tunnel
 
-In Cloudflare, point the `tomato` A record at the static IP `gcp-setup.sh`
-printed, with the record set to **DNS only** (grey cloud) — Caddy needs to
-talk directly to Let's Encrypt, which a Cloudflare-proxied (orange cloud)
-record would block.
+1. Cloudflare Zero Trust → Networks → Tunnels → create a `cloudflared`
+   tunnel named `tom8to`. Copy the token (the long string after `--token`
+   in the install command it shows) into `TUNNEL_TOKEN` in
+   `/opt/tom8to/.env`. Don't run the install command itself — the
+   `cloudflared` container in the compose file is the connector.
+2. Deploy, so the `cloudflared` container is running (the tunnel shows
+   **Healthy** in the dashboard).
+3. In Cloudflare DNS, delete any existing `tomato` A record — the next step
+   fails with "record already exists" otherwise.
+4. On the tunnel, add a public hostname:
+   - Subdomain `tomato`, domain `alex-ware.com`, path empty
+   - Service type `HTTP`, URL `tom8to_web:80`
+
+   Cloudflare creates the proxied CNAME itself.
+5. Make sure no firewall rule allows 80/443 to the VM:
+   ```bash
+   gcloud compute firewall-rules delete tom8to-allow-web
+   ```
+
+To host another app on this VM: put its container on the `edge` Docker
+network (declared `external: true` in that app's compose file) and add
+another public hostname on the same tunnel pointing at
+`http://<container-name>:<port>`.
 
 ## Decommissioning AWS (after a few days of stable GCP traffic)
 

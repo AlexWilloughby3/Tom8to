@@ -3,21 +3,40 @@ services:
     image: ${REGISTRY}/web:${TAG}
     container_name: tom8to_web
     restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    environment:
-      DOMAIN: ${DOMAIN}
+    # No published ports: the only way in is the Cloudflare Tunnel below, which
+    # reaches this container over the `edge` network.
     volumes:
       - caddy_data:/data
       - caddy_config:/config
+    networks:
+      - default
+      - edge
     depends_on:
       - api
     deploy:
       resources:
         limits:
           memory: 256m
+
+  # Dials out to Cloudflare and carries all public traffic back in, so the VM
+  # needs no inbound 80/443. Hostname -> service routing lives in the Cloudflare
+  # dashboard (tomato.alex-ware.com -> http://tom8to_web:80). Other apps on this
+  # VM join the `edge` network as external and get their own hostname there.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    networks:
+      - edge
+    depends_on:
+      - web
+    deploy:
+      resources:
+        limits:
+          memory: 128m
 
   api:
     image: ${REGISTRY}/api:${TAG}
@@ -54,6 +73,10 @@ services:
       resources:
         limits:
           memory: 768m
+
+networks:
+  edge:
+    name: edge
 
 volumes:
   caddy_data:

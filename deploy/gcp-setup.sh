@@ -2,7 +2,7 @@
 # One-time, idempotent setup from your laptop. Assumes the VM (tom8tovm)
 # already exists — this script wires up Artifact Registry, a dedicated
 # CI/CD service account, Workload Identity Federation for GitHub Actions,
-# firewall rules for web traffic, and a weekly disk snapshot schedule.
+# an IAP-only SSH firewall rule, and a weekly disk snapshot schedule.
 # Safe to re-run.
 #
 # Usage: PROJECT_ID=project-b34fa6f3-390d-413d-8fb bash deploy/gcp-setup.sh
@@ -117,7 +117,7 @@ else
   echo "tom8to-ip already reserved, skipping"
 fi
 
-echo "== Network tag + firewall for web traffic =="
+echo "== Network tag + firewall =="
 CURRENT_TAGS="$(gcloud compute instances describe "$VM_NAME" --zone="$ZONE" --format='value(tags.items)')"
 if [[ "$CURRENT_TAGS" != *web* ]]; then
   gcloud compute instances add-tags "$VM_NAME" --zone="$ZONE" --tags=web
@@ -125,13 +125,8 @@ else
   echo "VM already tagged 'web', skipping"
 fi
 
-if ! gcloud compute firewall-rules describe tom8to-allow-web >/dev/null 2>&1; then
-  gcloud compute firewall-rules create tom8to-allow-web \
-    --direction=INGRESS --action=ALLOW --rules=tcp:80,tcp:443,udp:443 \
-    --source-ranges=0.0.0.0/0 --target-tags=web
-else
-  echo "firewall rule tom8to-allow-web already exists, skipping"
-fi
+# No 80/443 rule on purpose: web traffic arrives over the Cloudflare Tunnel,
+# which is an outbound connection from the VM. The only inbound rule is IAP SSH.
 
 if ! gcloud compute firewall-rules describe tom8to-allow-iap-ssh >/dev/null 2>&1; then
   gcloud compute firewall-rules create tom8to-allow-iap-ssh \

@@ -1,4 +1,6 @@
-{$DOMAIN} {
+# Plain HTTP on purpose: TLS terminates at Cloudflare's edge and traffic arrives
+# through the tunnel (cloudflared), so Caddy holds no certificates.
+:80 {
 	encode gzip zstd
 
 	@assets path /assets/*
