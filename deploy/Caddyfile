@@ -1,0 +1,18 @@
+{$DOMAIN} {
+	encode gzip zstd
+
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	reverse_proxy /api/* api:8000
+
+	root * /srv
+	file_server
+	try_files {path} /index.html
+}
+
+# Once alex-ware.com / www.alex-ware.com DNS point at this VM, uncomment to
+# redirect the apex and www to the tomato subdomain:
+# alex-ware.com, www.alex-ware.com {
+# 	redir https://{$DOMAIN}{uri} permanent
+# }

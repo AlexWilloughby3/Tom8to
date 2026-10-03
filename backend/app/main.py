@@ -1,21 +1,139 @@
-from fastapi import FastAPI, Depends, HTTPException, Query
+import re
+from urllib.parse import unquote
+
+from fastapi import FastAPI, Depends, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from typing import List, Optional
+from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta
 
-from . import models, schemas, crud, email_service
-from .database import engine, get_db
+from . import models, schemas, crud, email_service, timezone_utils, user_context
+from .database import SessionLocal, engine, get_db
 
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
+
+# Lightweight schema migration: ensure timezone column exists on existing DBs.
+# create_all only creates missing tables; it does not add new columns. All
+# existing rows are backfilled to America/New_York to preserve current semantics.
+with engine.begin() as _conn:
+    _conn.execute(
+        text(
+            "ALTER TABLE user_information "
+            "ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) "
+            "NOT NULL DEFAULT 'America/New_York'"
+        )
+    )
+    # Per-session tz: each focus_information row records the tz the user was
+    # in when it was logged, so bucketing into local days/weeks pins to that
+    # calendar rather than the user's *current* tz. Backfill from the
+    # owning user's stored timezone — best-effort guess for pre-existing rows.
+    _conn.execute(
+        text(
+            "ALTER TABLE focus_information "
+            "ADD COLUMN IF NOT EXISTS tz VARCHAR(64) "
+            "NOT NULL DEFAULT 'America/New_York'"
+        )
+    )
+    _conn.execute(
+        text(
+            "UPDATE focus_information AS f "
+            "SET tz = u.timezone "
+            "FROM user_information AS u "
+            "WHERE f.email = u.email "
+            "AND f.tz = 'America/New_York' "
+            "AND u.timezone <> 'America/New_York'"
+        )
+    )
+    # focus_goal_information predates the daily/weekly checkbox goals feature,
+    # which added goal_type as part of the primary key (was just email+category)
+    # and made goal_time_per_week_seconds optional (checkbox goals don't use it).
+    # Existing rows are pre-checkbox-feature TIME_BASED goals, so backfill as such.
+    _conn.execute(
+        text(
+            "ALTER TABLE focus_goal_information "
+            "ALTER COLUMN goal_time_per_week_seconds DROP NOT NULL"
+        )
+    )
+    _conn.execute(
+        text(
+            "ALTER TABLE focus_goal_information "
+            "ADD COLUMN IF NOT EXISTS description VARCHAR(255)"
+        )
+    )
+    _conn.execute(
+        text(
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'focus_goal_information'
+                    AND column_name = 'goal_type'
+                ) THEN
+                    ALTER TABLE focus_goal_information
+                        ADD COLUMN goal_type VARCHAR(50) NOT NULL DEFAULT 'TIME_BASED';
+                    ALTER TABLE focus_goal_information
+                        DROP CONSTRAINT focus_goal_information_pkey;
+                    ALTER TABLE focus_goal_information
+                        ADD PRIMARY KEY (email, category, goal_type);
+                END IF;
+            END $$;
+            """
+        )
+    )
 
 app = FastAPI(
     title="Focus Tracker API",
     description="FastAPI backend for focus time tracking application",
     version="1.0.0"
 )
+
+
+_EMAIL_IN_PATH = re.compile(r"^/api/users/([^/]+)")
+
+
+@app.middleware("http")
+async def attach_user_tz(request: Request, call_next):
+    """Hydrate user_context.current_tz from {email} path segment, if present.
+
+    Login/register paths do not match (they live under /api/users/<verb>,
+    where the verb is not a registered email). For those, endpoint code
+    sets the tz explicitly after authenticating.
+    """
+    match = _EMAIL_IN_PATH.match(request.url.path)
+    if match:
+        candidate = unquote(match.group(1))
+        # "@" in the segment is a cheap sanity check that this is an email,
+        # not a non-user verb like "login" or "register".
+        if "@" in candidate:
+            db = SessionLocal()
+            try:
+                user = crud.get_user(db, email=candidate)
+                if user is not None:
+                    user_context.set_current_tz(
+                        user_context.tz_from_name(user.timezone)
+                    )
+            finally:
+                db.close()
+    return await call_next(request)
+
+
+def _maybe_update_user_tz(db: Session, user: models.UserInformation, tz_name: Optional[str]) -> None:
+    """If a valid IANA tz is supplied and differs from the user's stored value,
+    persist it. Invalid names are silently ignored."""
+    if not tz_name:
+        return
+    try:
+        ZoneInfo(tz_name)
+    except Exception:
+        return
+    if user.timezone != tz_name:
+        user.timezone = tz_name
+        db.commit()
+    user_context.set_current_tz(ZoneInfo(tz_name))
 
 # Configure CORS - Update origins with your GitHub Pages URL
 app.add_middleware(
@@ -90,6 +208,7 @@ def login_user(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
     user = crud.authenticate_user(db, email=credentials.email, password=credentials.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    _maybe_update_user_tz(db, user, credentials.timezone)
     return user
 
 
@@ -345,11 +464,13 @@ def get_user_stats(
 
 @app.get("/api/users/{email}/stats/weekly", response_model=schemas.UserStats)
 def get_weekly_stats(email: str, db: Session = Depends(get_db)):
-    """Get statistics for the current week"""
-    # Calculate start of current week (Monday)
-    today = datetime.utcnow()
-    start_of_week = today - timedelta(days=today.weekday())
-    start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
+    """Get statistics for the current week, anchored to the user's timezone."""
+    user_tz = user_context.get_current_tz()
+    week_start_local = timezone_utils.get_local_week_start(tz=user_tz)
+    start_of_week = timezone_utils.local_to_utc(week_start_local, user_tz).replace(
+        tzinfo=None
+    )
+    today = timezone_utils.utc_now_naive()
 
     return crud.get_user_stats(
         db=db,
@@ -541,6 +662,7 @@ def verify_registration(credentials: schemas.RegistrationVerification, db: Sessi
     if not user:
         raise HTTPException(status_code=500, detail="User creation failed")
 
+    _maybe_update_user_tz(db, user, credentials.timezone)
     return user
 
 
@@ -556,6 +678,7 @@ def login_with_verification_code(credentials: schemas.VerificationCodeLogin, db:
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    _maybe_update_user_tz(db, user, credentials.timezone)
     return user
 
 

@@ -76,6 +76,7 @@ describe('Timer Component', () => {
       category: 'Work',
       focus_time_seconds: 10,
       time: new Date().toISOString(),
+      tz: 'America/New_York',
     });
 
     renderTimer();

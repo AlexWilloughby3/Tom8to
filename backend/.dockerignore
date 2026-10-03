@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+*.db
+*.sqlite3
+.env
+.env.*
+test_*.py
+conftest.py
+admin.py

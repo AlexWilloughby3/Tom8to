@@ -4,6 +4,7 @@ export interface User {
   email: string;
   display_name?: string;
   show_on_leaderboard: boolean;
+  timezone: string;
 }
 
 export interface UserUpdate {
@@ -16,6 +17,7 @@ export interface FocusSession {
   time: string;
   focus_time_seconds: number;
   category: string;
+  tz: string;
 }
 
 export interface FocusGoal {
@@ -56,11 +58,13 @@ export interface UserStats {
 export interface LoginCredentials {
   email: string;
   password: string;
+  timezone?: string;
 }
 
 export interface RegisterData {
   email: string;
   password: string;
+  timezone?: string;
 }
 
 export interface FocusSessionCreate {
@@ -171,6 +175,7 @@ export interface ExportedSession {
   time: string; // ISO format datetime string
   focus_time_seconds: number;
   category: string;
+  tz?: string; // IANA tz the session was logged in
 }
 
 export interface UserDataExport {

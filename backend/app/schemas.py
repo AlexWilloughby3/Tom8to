@@ -23,11 +23,17 @@ class UserCreate(UserBase):
         min_length=8,
         description="User password (will be hashed, min 8 characters)",
     )
+    timezone: Optional[str] = Field(
+        None, max_length=64, description="IANA timezone name (e.g. America/Chicago)"
+    )
 
 
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+    timezone: Optional[str] = Field(
+        None, max_length=64, description="IANA timezone name (e.g. America/Chicago)"
+    )
 
 
 class User(UserBase):
@@ -35,6 +41,7 @@ class User(UserBase):
 
     display_name: Optional[str] = None
     show_on_leaderboard: bool = True
+    timezone: str = "America/New_York"
 
     class Config:
         from_attributes = True
@@ -85,6 +92,7 @@ class FocusSessionCreateWithTime(FocusSessionBase):
 class FocusSession(FocusSessionBase):
     email: str
     time: datetime
+    tz: str = "America/New_York"
 
     class Config:
         from_attributes = True
@@ -211,6 +219,9 @@ class VerificationCodeLogin(BaseModel):
     code: str = Field(
         ..., min_length=6, max_length=6, description="6-digit verification code"
     )
+    timezone: Optional[str] = Field(
+        None, max_length=64, description="IANA timezone name (e.g. America/Chicago)"
+    )
 
 
 class PasswordChangeRequest(BaseModel):
@@ -235,6 +246,7 @@ class ExportedSession(BaseModel):
     time: str  # ISO format datetime string
     focus_time_seconds: int
     category: str
+    tz: Optional[str] = None  # IANA tz the session was logged in
 
 
 class UserDataExport(BaseModel):
@@ -274,6 +286,9 @@ class RegistrationVerification(BaseModel):
     email: EmailStr
     code: str = Field(
         ..., min_length=6, max_length=6, description="6-digit verification code"
+    )
+    timezone: Optional[str] = Field(
+        None, max_length=64, description="IANA timezone name (e.g. America/Chicago)"
     )
 
 

@@ -1,12 +1,16 @@
 # Focus Tracker
 
-A full-stack focus time tracking application with a React TypeScript frontend hosted on GitHub Pages and a FastAPI + PostgreSQL backend running on AWS EC2 with Docker.
+A full-stack focus time tracking application. Deployed as three containers
+(Caddy + FastAPI + Postgres) on a single GCP VM, built and shipped by GitHub
+Actions. See [`docs/DEPLOY.md`](docs/DEPLOY.md) for the full deployment
+story.
 
 ## Architecture
 
-- **Frontend**: React + TypeScript static site hosted on GitHub Pages
-- **Backend**: FastAPI running on AWS EC2 in Docker container
-- **Database**: PostgreSQL running in Docker container alongside API
+- **Frontend**: React + TypeScript, served in production by Caddy as a
+  static build (`frontend/Dockerfile`); `npm run dev` locally
+- **Backend**: FastAPI, same Docker image in dev and prod (`backend/Dockerfile`)
+- **Database**: PostgreSQL, same image in dev and prod
 
 ## Project Structure
 
@@ -34,7 +38,10 @@ A full-stack focus time tracking application with a React TypeScript frontend ho
 │   │   └── init.sql      # Database schema
 │   ├── Dockerfile
 │   └── requirements.txt
-├── docker-compose.yml     # Docker orchestration
+├── deploy/                # Production compose file, Caddyfile, VM/GCP setup scripts
+├── .github/workflows/     # CI: test on PR/push, deploy to GCP on main
+├── docker-compose.yml     # Local dev orchestration (db + api only)
+├── Makefile
 ├── .gitignore
 └── README.md
 ```
@@ -50,8 +57,8 @@ A full-stack focus time tracking application with a React TypeScript frontend ho
 
 1. **Clone the repository**
    ```bash
-   git clone <your-repo-url>
-   cd "App for Dad"
+   git clone https://github.com/AlexWilloughby3/Tom8to.git
+   cd Tom8to
    ```
 
 2. **Set up environment variables**
@@ -60,9 +67,10 @@ A full-stack focus time tracking application with a React TypeScript frontend ho
    # Edit .env if needed
    ```
 
-3. **Start the services**
+3. **Start the backend** (either works)
    ```bash
-   docker-compose up --build
+   make backend-build backend-up
+   # or: docker compose up --build
    ```
 
 4. **Access the API**
@@ -72,13 +80,12 @@ A full-stack focus time tracking application with a React TypeScript frontend ho
 
 5. **Start the frontend** (in a separate terminal)
    ```bash
-   cd frontend
-   npm install
-   npm run dev
+   make frontend-up
+   # or: cd frontend && npm install && npm run dev
    ```
 
 6. **Access the application**
-   - Frontend: http://localhost:3000
+   - Frontend: http://localhost:3000 (Vite proxies `/api` to the backend)
    - Backend API: http://localhost:8000
    - API Docs: http://localhost:8000/docs
    - PostgreSQL: localhost:5432
@@ -132,96 +139,15 @@ A full-stack focus time tracking application with a React TypeScript frontend ho
 
 See the interactive API documentation at `http://localhost:8000/docs` after starting the backend.
 
-## Deployment to AWS EC2
+## Deployment
 
-### 1. Launch EC2 Instance
+Production runs as three containers (Caddy, FastAPI, Postgres) on a single
+GCP VM, deployed automatically by GitHub Actions on every push to `main`.
+There's no GitHub Pages step and no separate EC2/nginx setup anymore — the
+frontend is built into a Caddy image and served same-origin with the API.
 
-- Choose Amazon Linux 2 or Ubuntu
-- Instance type: t2.micro (free tier) or larger
-- Configure security group to allow:
-  - SSH (port 22) from your IP
-  - HTTP (port 80) from anywhere
-  - HTTPS (port 443) from anywhere
-  - Custom TCP (port 8000) from anywhere
-
-### 2. Install Docker on EC2
-
-```bash
-# For Amazon Linux 2
-sudo yum update -y
-sudo yum install -y docker
-sudo service docker start
-sudo usermod -a -G docker ec2-user
-
-# Install Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-```
-
-### 3. Deploy Application
-
-```bash
-# Clone your repository
-git clone <your-repo-url>
-cd "App for Dad"
-
-# Create .env file
-cp backend/.env.example .env
-# Edit .env with production values
-
-# Start services
-docker-compose up -d --build
-```
-
-### 4. Configure CORS
-
-Update `backend/app/main.py` to include your GitHub Pages URL:
-
-```python
-allow_origins=[
-    "https://yourusername.github.io",  # Your GitHub Pages URL
-]
-```
-
-### 5. Set Up HTTPS (Recommended)
-
-Consider using:
-- AWS Application Load Balancer with ACM certificate
-- Nginx reverse proxy with Let's Encrypt
-- Cloudflare as a proxy
-
-## Deploying Frontend to GitHub Pages
-
-1. **Update `frontend/vite.config.ts`:**
-   ```typescript
-   base: '/your-repo-name/', // e.g., '/focus-tracker/'
-   ```
-
-2. **Create `frontend/.env.production`:**
-   ```env
-   VITE_API_URL=http://your-ec2-ip:8000
-   ```
-
-3. **Build and deploy:**
-   ```bash
-   cd frontend
-   npm run deploy
-   ```
-
-4. **Enable GitHub Pages:**
-   - Go to repository Settings > Pages
-   - Set source to "gh-pages" branch
-   - Your site will be at `https://username.github.io/repo-name/`
-
-5. **Update CORS in backend:**
-   Edit `backend/app/main.py` to include your GitHub Pages URL:
-   ```python
-   allow_origins=[
-       "https://username.github.io",
-   ]
-   ```
-
-See `frontend/README.md` for detailed deployment instructions.
+See [`docs/DEPLOY.md`](docs/DEPLOY.md) for the full runbook: one-time GCP
+setup, the CI/CD pipeline, DNS cutover, backups, and restoring from backup.
 
 ## Database Management
 
@@ -328,19 +254,21 @@ docker-compose ps
 
 ### Infrastructure
 - Docker & Docker Compose
-- AWS EC2 (backend)
-- GitHub Pages (frontend)
+- Caddy (TLS + static frontend + reverse proxy)
+- Google Cloud Platform (Compute Engine VM, Artifact Registry)
+- GitHub Actions (CI + deploy, via Workload Identity Federation)
 
 ## Next Steps
 
-1. ✅ Frontend and backend templates created
-2. Set up GitHub repository
-3. Deploy backend to EC2
-4. Deploy frontend to GitHub Pages
-5. Set up custom domain (optional)
-6. Add JWT authentication (optional upgrade)
-7. Set up monitoring and logging
-8. Configure automated backups
+See [`docs/DEPLOY.md`](docs/DEPLOY.md) for the deployment rollout checklist.
+Known gaps in the application itself (not yet addressed):
+1. Real session-based authentication — user-scoped routes currently trust
+   the email in the URL with no verification.
+2. Cross-user frontend state leak — the timer/category provider isn't
+   cleared or scoped per-user on logout.
+3. Split `main.py`/`crud.py` into routers and introduce Alembic migrations.
+4. Fix the failing backend/frontend test suites and remove `continue-on-error`
+   from the CI workflow once they pass.
 
 ## License
 

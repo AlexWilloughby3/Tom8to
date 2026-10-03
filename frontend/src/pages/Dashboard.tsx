@@ -115,21 +115,23 @@ export default function Dashboard() {
             >
               {weeklyStats.categories.map((cat) =>
                 cat.daily_checkbox_goals?.map((goal, idx) => {
-                  // Get today's date in Eastern Time using proper timezone conversion
+                  // Display "today" / day-of-week in the user's own timezone
+                  // (the backend already computes completion data against it).
+                  const userTz =
+                    user?.timezone ||
+                    Intl.DateTimeFormat().resolvedOptions().timeZone;
                   const now = new Date();
                   const formatter = new Intl.DateTimeFormat("en-CA", {
-                    timeZone: "America/New_York",
+                    timeZone: userTz,
                     year: "numeric",
                     month: "2-digit",
                     day: "2-digit",
                   });
                   const today = formatter.format(now); // Returns YYYY-MM-DD format
 
-                  // Get current day of week in ET (0 = Sunday)
-                  const etDayOfWeek = new Date(
-                    now.toLocaleString("en-US", {
-                      timeZone: "America/New_York",
-                    }),
+                  // Current day of week in the user's tz (0 = Sunday)
+                  const localDayOfWeek = new Date(
+                    now.toLocaleString("en-US", { timeZone: userTz }),
                   ).getDay();
 
                   return (
@@ -212,11 +214,9 @@ export default function Dashboard() {
                       >
                         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
                           (day, dayIdx) => {
-                            const diff = dayIdx - etDayOfWeek;
+                            const diff = dayIdx - localDayOfWeek;
                             const targetDate = new Date(
-                              now.toLocaleString("en-US", {
-                                timeZone: "America/New_York",
-                              }),
+                              now.toLocaleString("en-US", { timeZone: userTz }),
                             );
                             targetDate.setDate(targetDate.getDate() + diff);
                             const dateStr = formatter.format(targetDate);

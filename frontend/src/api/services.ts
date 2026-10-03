@@ -25,18 +25,36 @@ import type {
   ImportResult,
 } from '../types';
 
+function detectTimezone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // User/Auth Services
 export const authService = {
   async register(data: RegisterData): Promise<{ message: string }> {
-    return api.post<{ message: string }>('/users/register', data);
+    return api.post<{ message: string }>('/users/register', {
+      ...data,
+      timezone: data.timezone ?? detectTimezone(),
+    });
   },
 
   async verifyRegistration(email: string, code: string): Promise<User> {
-    return api.post<User>('/users/verify-registration', { email, code });
+    return api.post<User>('/users/verify-registration', {
+      email,
+      code,
+      timezone: detectTimezone(),
+    });
   },
 
   async login(credentials: LoginCredentials): Promise<User> {
-    return api.post<User>('/users/login', credentials);
+    return api.post<User>('/users/login', {
+      ...credentials,
+      timezone: credentials.timezone ?? detectTimezone(),
+    });
   },
 
   async getUser(email: string): Promise<User> {
@@ -220,7 +238,11 @@ export const verificationService = {
   },
 
   async loginWithCode(email: string, code: string): Promise<User> {
-    return api.post<User>('/users/login-with-code', { email, code });
+    return api.post<User>('/users/login-with-code', {
+      email,
+      code,
+      timezone: detectTimezone(),
+    });
   },
 };
 

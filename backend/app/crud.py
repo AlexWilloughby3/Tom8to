@@ -6,7 +6,7 @@ import bcrypt
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import email_service, models, schemas, timezone_utils
+from . import email_service, models, schemas, timezone_utils, user_context
 
 
 def hash_password(password: str) -> str:
@@ -45,6 +45,7 @@ def create_user(db: Session, user: schemas.UserCreate) -> models.UserInformation
         email=user.email,
         password=hashed_password,
         display_name=user.email,  # Default display name to email
+        timezone=user_context.tz_from_name(user.timezone).key,
     )
     db.add(db_user)
     db.commit()
@@ -107,18 +108,18 @@ def create_focus_session(
     focus_session: schemas.FocusSessionCreate,
     time: Optional[datetime] = None,
 ) -> models.FocusInformation:
-    """Create a focus session (defaults to current time in Eastern timezone)
+    """Create a focus session (defaults to current time in the user's timezone).
 
-    If the session crosses midnight in Eastern time, it will be split into
-    multiple sessions, one for each day.
+    If the session crosses local midnight, it is split into one session per day.
     """
+    user_tz = user_context.get_current_tz()
+
     if time is None:
-        time = timezone_utils.get_eastern_now()
+        time = timezone_utils.now_local(user_tz)
 
     # Auto-create category if it doesn't exist
     category_obj = get_category(db, email, focus_session.category)
     if not category_obj:
-        # Check if user already has 20 categories
         category_count = (
             db.query(func.count(models.CategoryInformation.category))
             .filter(models.CategoryInformation.email == email)
@@ -134,29 +135,24 @@ def create_focus_session(
         db.add(category_obj)
         db.commit()
 
-    # Calculate start time (time parameter is the END time)
-    # Ensure end_time is in Eastern timezone for calculations
+    # Anchor end_time in the user's local tz for midnight-split calculations
     if time.tzinfo is None:
-        end_time = time.replace(tzinfo=timezone_utils.EASTERN)
+        end_time = time.replace(tzinfo=user_tz)
     else:
-        end_time = time.astimezone(timezone_utils.EASTERN)
+        end_time = time.astimezone(user_tz)
 
     start_time = end_time - timedelta(seconds=focus_session.focus_time_seconds)
 
-    # Split session at midnight boundaries in Eastern time
     sessions_to_create = timezone_utils.split_session_at_midnight(
-        start_time, focus_session.focus_time_seconds
+        start_time, focus_session.focus_time_seconds, user_tz
     )
 
-    # Create all split sessions
     created_sessions = []
     for session_start, session_duration in sessions_to_create:
-        # Session end time is start + duration
         session_end = session_start + timedelta(seconds=session_duration)
 
-        # Convert to UTC for storage (database stores timezone-naive as UTC)
-        session_end_utc = timezone_utils.eastern_to_utc(session_end)
-        # Remove timezone info for database storage (store as naive UTC)
+        # Database stores naive UTC
+        session_end_utc = timezone_utils.local_to_utc(session_end, user_tz)
         session_end_naive = session_end_utc.replace(tzinfo=None)
 
         db_session = models.FocusInformation(
@@ -164,6 +160,7 @@ def create_focus_session(
             time=session_end_naive,  # Store as naive UTC
             focus_time_seconds=session_duration,
             category=focus_session.category,
+            tz=user_tz.key,
         )
         db.add(db_session)
         created_sessions.append(db_session)
@@ -320,37 +317,32 @@ def toggle_checkbox_completion(
     goal_type: str,
     completion_date: Optional[datetime] = None,
 ) -> models.CheckboxGoalCompletion:
-    """Toggle checkbox completion for today (daily) or this week (weekly)"""
-    from datetime import timedelta
+    """Toggle checkbox completion for today (daily) or this week (weekly).
 
-    from . import timezone_utils
+    "Today" / "this week" are computed in the user's local timezone.
+    """
+    user_tz = user_context.get_current_tz()
 
-    # Validate goal exists
     goal = get_focus_goal(db, email, category, goal_type)
     if not goal:
         raise ValueError(f"No {goal_type} goal found for category {category}")
 
-    # Calculate completion_date based on goal_type
     if completion_date is None:
-        now_eastern = timezone_utils.get_eastern_now()
+        now_local = timezone_utils.now_local(user_tz)
 
         if goal_type == "DAILY_CHECKBOX":
-            # Midnight of today in ET
-            completion_date = timezone_utils.get_eastern_midnight(now_eastern)
+            completion_date = timezone_utils.get_local_midnight(now_local, user_tz)
         elif goal_type == "WEEKLY_CHECKBOX":
-            # Sunday midnight of this week in ET
-            week_start = timezone_utils.get_eastern_week_start(now_eastern)
-            # Adjust to Sunday (week_start returns Monday, so go back 1 day)
+            week_start = timezone_utils.get_local_week_start(now_local, user_tz)
+            # week_start is Monday; we anchor weekly completions to Sunday
             completion_date = week_start - timedelta(days=1)
         else:
             raise ValueError(f"Invalid goal_type for checkbox: {goal_type}")
 
-    # Convert to UTC for storage
-    completion_date_utc = timezone_utils.eastern_to_utc(completion_date).replace(
-        tzinfo=None
-    )
+    completion_date_utc = timezone_utils.local_to_utc(
+        completion_date, user_tz
+    ).replace(tzinfo=None)
 
-    # Check if completion already exists
     db_completion = (
         db.query(models.CheckboxGoalCompletion)
         .filter(
@@ -362,27 +354,19 @@ def toggle_checkbox_completion(
         .first()
     )
 
+    now_utc_naive = timezone_utils.utc_now_naive()
+
     if db_completion:
-        # Toggle existing
         db_completion.completed = not db_completion.completed
-        db_completion.completed_at = (
-            timezone_utils.eastern_to_utc(timezone_utils.get_eastern_now()).replace(
-                tzinfo=None
-            )
-            if db_completion.completed
-            else None
-        )
+        db_completion.completed_at = now_utc_naive if db_completion.completed else None
     else:
-        # Create new (mark as completed)
         db_completion = models.CheckboxGoalCompletion(
             email=email,
             category=category,
             goal_type=goal_type,
             completion_date=completion_date_utc,
             completed=True,
-            completed_at=timezone_utils.eastern_to_utc(
-                timezone_utils.get_eastern_now()
-            ).replace(tzinfo=None),
+            completed_at=now_utc_naive,
         )
         db.add(db_completion)
 
@@ -455,27 +439,57 @@ def get_user_stats(
     )
     active_category_names = {cat.category for cat in active_categories}
 
-    # Build base query for time logged
-    query = db.query(
-        models.FocusInformation.category,
-        func.sum(models.FocusInformation.focus_time_seconds).label("total_time"),
-        func.count(models.FocusInformation.time).label("session_count"),
-        func.avg(models.FocusInformation.focus_time_seconds).label("avg_time"),
-    ).filter(models.FocusInformation.email == email)
+    user_tz = user_context.get_current_tz()
 
-    # Apply date filters
+    # Fetch raw rows (UTC window widened by ±1 day when bounds are given) and
+    # aggregate in Python — each session is bucketed by ITS OWN logged tz's
+    # local date, so the requested range maps to user-current-tz local dates
+    # while individual sessions stay pinned to the tz they were logged in.
+    rows_query = db.query(models.FocusInformation).filter(
+        models.FocusInformation.email == email
+    )
     if start_date:
-        query = query.filter(models.FocusInformation.time >= start_date)
+        rows_query = rows_query.filter(
+            models.FocusInformation.time >= start_date - timedelta(days=1)
+        )
     if end_date:
-        query = query.filter(models.FocusInformation.time <= end_date)
+        rows_query = rows_query.filter(
+            models.FocusInformation.time <= end_date + timedelta(days=1)
+        )
+    all_rows = rows_query.all()
 
-    # Group by category
-    category_stats = query.group_by(models.FocusInformation.category).all()
+    start_local_date = None
+    end_local_date = None
+    if start_date is not None:
+        start_local_date = timezone_utils.utc_to_local(start_date, user_tz).date()
+    if end_date is not None:
+        end_local_date = timezone_utils.utc_to_local(end_date, user_tz).date()
+
+    def _in_range(s):
+        d = timezone_utils.session_local_date(s)
+        if start_local_date is not None and d < start_local_date:
+            return False
+        if end_local_date is not None and d > end_local_date:
+            return False
+        return True
+
+    filtered_rows = [r for r in all_rows if _in_range(r)]
+
+    by_category: dict[str, list[int]] = {}
+    for r in filtered_rows:
+        by_category.setdefault(r.category, []).append(r.focus_time_seconds)
+    category_stats = [
+        (
+            cat,
+            sum(secs),
+            len(secs),
+            (sum(secs) / len(secs)) if secs else 0,
+        )
+        for cat, secs in by_category.items()
+    ]
 
     # Get goals for active categories only
-    from datetime import timedelta
-
-    from . import timezone_utils
+    user_tz = user_context.get_current_tz()
 
     all_goals = get_focus_goals(db, email)
     time_goals = {}
@@ -506,17 +520,16 @@ def get_user_stats(
                 "avg_time": avg_time or 0,
             }
 
-    # Get checkbox completions for the date range
-    now_eastern = timezone_utils.get_eastern_now()
-    week_start_eastern = timezone_utils.get_eastern_week_start(now_eastern)
-    week_start_utc = timezone_utils.eastern_to_utc(week_start_eastern).replace(
+    # Get checkbox completions for the date range, all anchored to user_tz
+    now_local = timezone_utils.now_local(user_tz)
+    week_start_local = timezone_utils.get_local_week_start(now_local, user_tz)
+    week_start_utc = timezone_utils.local_to_utc(week_start_local, user_tz).replace(
         tzinfo=None
     )
 
-    # For daily goals, get last 7 days
-    today_midnight_eastern = timezone_utils.get_eastern_midnight(now_eastern)
-    seven_days_ago = today_midnight_eastern - timedelta(days=6)
-    seven_days_ago_utc = timezone_utils.eastern_to_utc(seven_days_ago).replace(
+    today_midnight_local = timezone_utils.get_local_midnight(now_local, user_tz)
+    seven_days_ago = today_midnight_local - timedelta(days=6)
+    seven_days_ago_utc = timezone_utils.local_to_utc(seven_days_ago, user_tz).replace(
         tzinfo=None
     )
 
@@ -572,7 +585,9 @@ def get_user_stats(
                         "description": daily_goal.description,
                         "completions": [
                             {
-                                "date": timezone_utils.utc_to_eastern(c.completion_date)
+                                "date": timezone_utils.utc_to_local(
+                                    c.completion_date, user_tz
+                                )
                                 .date()
                                 .isoformat(),
                                 "completed": c.completed,
@@ -875,15 +890,14 @@ def get_graph_data(
         email: User email
         time_range: 'week', 'month', '6month', 'ytd', or 'custom'
         category: Optional category filter
-        start_date: Optional start date for custom range (YYYY-MM-DD format in Eastern Time)
-        end_date: Optional end date for custom range (YYYY-MM-DD format in Eastern Time)
+        start_date: Optional start date for custom range (YYYY-MM-DD in user's local tz)
+        end_date: Optional end date for custom range (YYYY-MM-DD in user's local tz)
     """
     from datetime import datetime, timedelta
 
-    from sqlalchemy import func
+    user_tz = user_context.get_current_tz()
 
-    # Calculate date ranges in Eastern Time
-    today_eastern = timezone_utils.get_eastern_now().replace(
+    today_local = timezone_utils.now_local(user_tz).replace(
         hour=23, minute=59, second=59, microsecond=999999
     )
 
@@ -893,132 +907,95 @@ def get_graph_data(
                 "start_date and end_date are required for custom time range"
             )
 
-        # Parse dates as Eastern Time (YYYY-MM-DD format)
         try:
             start_parts = start_date.split("-")
             end_parts = end_date.split("-")
-            start_date_eastern = datetime(
+            start_date_local = datetime(
                 int(start_parts[0]),
                 int(start_parts[1]),
                 int(start_parts[2]),
-                0,
-                0,
-                0,
-                0,
-                tzinfo=timezone_utils.EASTERN,
+                0, 0, 0, 0,
+                tzinfo=user_tz,
             )
-            end_date_eastern = datetime(
+            end_date_local = datetime(
                 int(end_parts[0]),
                 int(end_parts[1]),
                 int(end_parts[2]),
-                23,
-                59,
-                59,
-                999999,
-                tzinfo=timezone_utils.EASTERN,
+                23, 59, 59, 999999,
+                tzinfo=user_tz,
             )
         except (ValueError, IndexError):
             raise ValueError("Invalid date format. Use YYYY-MM-DD")
 
-        # Determine if we should group by week based on date range
-        days_diff = (end_date_eastern - start_date_eastern).days
-        group_by_week = days_diff > 60  # Group by week if more than 60 days
+        days_diff = (end_date_local - start_date_local).days
+        group_by_week = days_diff > 60
 
     elif time_range == "week":
-        start_date_eastern = today_eastern - timedelta(days=6)  # Last 7 days
-        end_date_eastern = today_eastern
+        start_date_local = today_local - timedelta(days=6)
+        end_date_local = today_local
         group_by_week = False
     elif time_range == "month":
-        start_date_eastern = today_eastern - timedelta(days=29)  # Last 30 days
-        end_date_eastern = today_eastern
+        start_date_local = today_local - timedelta(days=29)
+        end_date_local = today_local
         group_by_week = False
     elif time_range == "6month":
-        start_date_eastern = today_eastern - timedelta(days=179)  # Last 180 days
-        end_date_eastern = today_eastern
+        start_date_local = today_local - timedelta(days=179)
+        end_date_local = today_local
         group_by_week = True
     elif time_range == "ytd":
-        start_date_eastern = datetime(
-            today_eastern.year, 1, 1, 0, 0, 0, 0, tzinfo=timezone_utils.EASTERN
-        )  # Start of year at midnight
-        end_date_eastern = today_eastern
-        # Group by week only if more than 60 days have passed
-        days_since_year_start = (end_date_eastern - start_date_eastern).days
+        start_date_local = datetime(
+            today_local.year, 1, 1, 0, 0, 0, 0, tzinfo=user_tz
+        )
+        end_date_local = today_local
+        days_since_year_start = (end_date_local - start_date_local).days
         group_by_week = days_since_year_start > 60
     else:
         raise ValueError(f"Invalid time_range: {time_range}")
 
-    # Convert to UTC for database query (database stores as naive UTC)
-    start_date_utc = timezone_utils.eastern_to_utc(start_date_eastern).replace(
+    start_date_utc = timezone_utils.local_to_utc(start_date_local, user_tz).replace(
         tzinfo=None
     )
-    end_date_utc = timezone_utils.eastern_to_utc(end_date_eastern).replace(tzinfo=None)
-
-    # Query focus sessions
-    query = db.query(models.FocusInformation).filter(
-        models.FocusInformation.email == email,
-        models.FocusInformation.time >= start_date_utc,
-        models.FocusInformation.time <= end_date_utc,
+    end_date_utc = timezone_utils.local_to_utc(end_date_local, user_tz).replace(
+        tzinfo=None
     )
 
-    # Filter by category if specified
+    # Widen the SQL window by a day on each side so we don't drop sessions
+    # whose own-tz local date overlaps the requested range but whose UTC
+    # timestamp falls outside the user-current-tz boundary.
+    query = db.query(models.FocusInformation).filter(
+        models.FocusInformation.email == email,
+        models.FocusInformation.time >= start_date_utc - timedelta(days=1),
+        models.FocusInformation.time <= end_date_utc + timedelta(days=1),
+    )
+
     if category:
         query = query.filter(models.FocusInformation.category == category)
 
     sessions = query.all()
 
-    # Group by day or week
     data_dict = {}
 
     if group_by_week:
-        # Group by week
         for session in sessions:
-            # Convert to Eastern time and get Monday of the week
-            # Database stores as naive UTC, so we need to add UTC timezone then convert to Eastern
-            if session.time.tzinfo:
-                eastern_time = timezone_utils.utc_to_eastern(session.time)
-            else:
-                # Treat naive datetime as UTC, add timezone, then convert to Eastern
-                utc_time = session.time.replace(tzinfo=ZoneInfo("UTC"))
-                eastern_time = utc_time.astimezone(timezone_utils.EASTERN)
-            week_start = timezone_utils.get_eastern_week_start(eastern_time)
-            week_key = week_start.strftime("%Y-%m-%d")
-
-            if week_key not in data_dict:
-                data_dict[week_key] = 0
-            data_dict[week_key] += session.focus_time_seconds
+            week_start_date = timezone_utils.session_local_week_start_date(session)
+            week_key = week_start_date.strftime("%Y-%m-%d")
+            data_dict[week_key] = data_dict.get(week_key, 0) + session.focus_time_seconds
     else:
-        # Group by day
         for session in sessions:
-            # Convert to Eastern time for consistent day boundaries
-            # Database stores as naive UTC, so we need to add UTC timezone then convert to Eastern
-            if session.time.tzinfo:
-                eastern_time = timezone_utils.utc_to_eastern(session.time)
-            else:
-                # Treat naive datetime as UTC, add timezone, then convert to Eastern
-                utc_time = session.time.replace(tzinfo=ZoneInfo("UTC"))
-                eastern_time = utc_time.astimezone(timezone_utils.EASTERN)
-            day_key = eastern_time.strftime("%Y-%m-%d")
+            day_key = timezone_utils.session_local_date(session).strftime("%Y-%m-%d")
+            data_dict[day_key] = data_dict.get(day_key, 0) + session.focus_time_seconds
 
-            if day_key not in data_dict:
-                data_dict[day_key] = 0
-            data_dict[day_key] += session.focus_time_seconds
-
-    # Fill in missing dates with 0
-    current = start_date_eastern.replace(hour=0, minute=0, second=0, microsecond=0)
+    current = start_date_local.replace(hour=0, minute=0, second=0, microsecond=0)
     filled_data = {}
 
     if group_by_week:
-        # Fill weeks - start from the Monday of the week containing start_date_eastern
-        first_week_start = timezone_utils.get_eastern_week_start(current)
-        current = first_week_start
-
-        while current <= end_date_eastern:
+        current = timezone_utils.get_local_week_start(current, user_tz)
+        while current <= end_date_local:
             week_key = current.strftime("%Y-%m-%d")
             filled_data[week_key] = data_dict.get(week_key, 0)
             current += timedelta(days=7)
     else:
-        # Fill days
-        while current <= end_date_eastern:
+        while current <= end_date_local:
             day_key = current.strftime("%Y-%m-%d")
             filled_data[day_key] = data_dict.get(day_key, 0)
             current += timedelta(days=1)
@@ -1052,9 +1029,7 @@ def create_verification_code(db: Session, email: str) -> str:
     expires_at = email_service.get_code_expiry()
 
     # Upsert (replace existing code if present)
-    now_utc = timezone_utils.eastern_to_utc(timezone_utils.get_eastern_now()).replace(
-        tzinfo=None
-    )
+    now_utc = timezone_utils.utc_now_naive()
 
     db_code = get_verification_code(db, email)
     if db_code:
@@ -1078,9 +1053,7 @@ def verify_code(db: Session, email: str, code: str) -> bool:
         return False
 
     # Check expiry (compare naive UTC times)
-    now_utc = timezone_utils.eastern_to_utc(timezone_utils.get_eastern_now()).replace(
-        tzinfo=None
-    )
+    now_utc = timezone_utils.utc_now_naive()
     if now_utc > db_code.expires_at:
         db.delete(db_code)  # Clean up expired code
         db.commit()
@@ -1117,8 +1090,7 @@ def create_password_reset_token(db: Session, email: str) -> str:
     import secrets
 
     token = secrets.token_urlsafe(32)
-    now_eastern = timezone_utils.get_eastern_now()
-    now_utc = timezone_utils.eastern_to_utc(now_eastern).replace(tzinfo=None)
+    now_utc = timezone_utils.utc_now_naive()
     expires_at = now_utc + timedelta(hours=1)  # Token expires in 1 hour
 
     db_token = models.PasswordResetToken(
@@ -1141,9 +1113,7 @@ def reset_password_with_token(db: Session, token: str, new_password: str) -> boo
         return False
 
     # Check if token is expired (compare naive UTC times)
-    now_utc = timezone_utils.eastern_to_utc(timezone_utils.get_eastern_now()).replace(
-        tzinfo=None
-    )
+    now_utc = timezone_utils.utc_now_naive()
     if now_utc > db_token.expires_at:
         db.delete(db_token)
         db.commit()
@@ -1182,9 +1152,7 @@ def create_pending_registration(db: Session, email: str, password: str) -> str:
     ).delete()
 
     # Convert to naive UTC for storage
-    now_utc = timezone_utils.eastern_to_utc(timezone_utils.get_eastern_now()).replace(
-        tzinfo=None
-    )
+    now_utc = timezone_utils.utc_now_naive()
 
     # Create new pending registration
     pending_reg = models.PendingRegistration(
@@ -1213,9 +1181,7 @@ def verify_registration_code(db: Session, email: str, code: str) -> bool:
         return False
 
     # Check if expired (compare naive UTC times)
-    now_utc = timezone_utils.eastern_to_utc(timezone_utils.get_eastern_now()).replace(
-        tzinfo=None
-    )
+    now_utc = timezone_utils.utc_now_naive()
     if now_utc > pending_reg.expires_at:
         db.delete(pending_reg)
         db.commit()
@@ -1249,8 +1215,12 @@ def verify_registration_code(db: Session, email: str, code: str) -> bool:
 
 
 def get_leaderboard_data(db: Session) -> List[schemas.LeaderboardEntry]:
-    """Get leaderboard data for all users who have opted in"""
-    # Get all users who have opted in to leaderboard
+    """Get leaderboard data for all users who have opted in.
+
+    Each participant's "this week" boundaries are computed in *their own*
+    timezone — so the leaderboard matches what each user sees on their own
+    dashboard.
+    """
     users = (
         db.query(models.UserInformation)
         .filter(models.UserInformation.show_on_leaderboard == True)
@@ -1259,25 +1229,40 @@ def get_leaderboard_data(db: Session) -> List[schemas.LeaderboardEntry]:
 
     leaderboard = []
 
-    # Calculate start of current week (Monday) in Eastern Time, then convert to UTC for database comparison
-    week_start_eastern = timezone_utils.get_eastern_week_start()
-    week_start_utc = timezone_utils.eastern_to_utc(week_start_eastern).replace(
-        tzinfo=None
-    )
-
     for user in users:
         email = user.email
+        participant_tz = user_context.tz_from_name(user.timezone)
 
-        # Get focus hours this week
-        week_sessions = (
-            db.query(func.sum(models.FocusInformation.focus_time_seconds))
+        # Per-participant week boundary in their CURRENT tz — that's the week
+        # the leaderboard shows them. Sessions count toward "this week" based
+        # on each session's OWN logged tz (its session_local_date overlap).
+        week_start_local = timezone_utils.get_local_week_start(tz=participant_tz)
+        week_start_utc = timezone_utils.local_to_utc(
+            week_start_local, participant_tz
+        ).replace(tzinfo=None)
+        week_start_date = week_start_local.date()
+        week_end_date = week_start_date + timedelta(days=6)
+
+        # Widen the UTC fetch by a day on each side so we don't drop sessions
+        # whose own-tz local date is in-week but UTC is out of bounds.
+        week_sessions_rows = (
+            db.query(models.FocusInformation)
             .filter(
                 models.FocusInformation.email == email,
-                models.FocusInformation.time >= week_start_utc,
+                models.FocusInformation.time >= week_start_utc - timedelta(days=1),
+                models.FocusInformation.time
+                <= week_start_utc + timedelta(days=8),
             )
-            .scalar()
-            or 0
+            .all()
         )
+        week_sessions_rows = [
+            s
+            for s in week_sessions_rows
+            if week_start_date
+            <= timezone_utils.session_local_date(s)
+            <= week_end_date
+        ]
+        week_sessions = sum(s.focus_time_seconds for s in week_sessions_rows)
 
         focus_hours_this_week = week_sessions / 3600.0
 
@@ -1322,15 +1307,10 @@ def get_leaderboard_data(db: Session) -> List[schemas.LeaderboardEntry]:
         )  # Update to count only TIME_BASED
 
         for goal in time_goals_this_week:
-            time_logged = (
-                db.query(func.sum(models.FocusInformation.focus_time_seconds))
-                .filter(
-                    models.FocusInformation.email == email,
-                    models.FocusInformation.category == goal.category,
-                    models.FocusInformation.time >= week_start_utc,
-                )
-                .scalar()
-                or 0
+            time_logged = sum(
+                s.focus_time_seconds
+                for s in week_sessions_rows
+                if s.category == goal.category
             )
 
             if (
@@ -1340,8 +1320,6 @@ def get_leaderboard_data(db: Session) -> List[schemas.LeaderboardEntry]:
                 goals_completed_this_week += 1
 
         # Calculate checkbox goal completions this week
-        from datetime import timedelta
-
         daily_checkbox_goals = [
             g for g in goals_this_week if g.goal_type == "DAILY_CHECKBOX"
         ]
@@ -1354,15 +1332,13 @@ def get_leaderboard_data(db: Session) -> List[schemas.LeaderboardEntry]:
 
         # Count daily completions this week (7 days × number of daily goals)
         daily_goals_completed = 0
-        week_start_eastern = timezone_utils.utc_to_eastern(week_start_utc)
 
         for goal in daily_checkbox_goals:
-            # Check each of the last 7 days
             for i in range(7):
-                day_midnight = week_start_eastern + timedelta(days=i)
-                day_midnight_utc = timezone_utils.eastern_to_utc(day_midnight).replace(
-                    tzinfo=None
-                )
+                day_midnight = week_start_local + timedelta(days=i)
+                day_midnight_utc = timezone_utils.local_to_utc(
+                    day_midnight, participant_tz
+                ).replace(tzinfo=None)
 
                 completion = (
                     db.query(models.CheckboxGoalCompletion)
@@ -1424,22 +1400,16 @@ def get_leaderboard_data(db: Session) -> List[schemas.LeaderboardEntry]:
                     .all()
                 )
 
-                # Group by week and check if goal was met in any week
+                # Group by week in each session's OWN tz so historical weeks
+                # stay pinned to the calendar the user lived in then.
                 weekly_totals = {}
                 for session in sessions:
-                    # Convert session time to Eastern and get week start
-                    eastern_time = (
-                        timezone_utils.utc_to_eastern(session.time)
-                        if session.time.tzinfo
-                        else session.time.replace(tzinfo=timezone_utils.EASTERN)
+                    week_key = timezone_utils.session_local_week_start_date(
+                        session
                     )
-                    week_start_date = timezone_utils.get_eastern_week_start(
-                        eastern_time
+                    weekly_totals[week_key] = (
+                        weekly_totals.get(week_key, 0) + session.focus_time_seconds
                     )
-                    week_key = week_start_date.date()
-                    if week_key not in weekly_totals:
-                        weekly_totals[week_key] = 0
-                    weekly_totals[week_key] += session.focus_time_seconds
 
                 # Check if goal was met in any week
                 if goal.goal_time_per_week_seconds:
@@ -1546,12 +1516,13 @@ def export_user_data(db: Session, email: str) -> schemas.UserDataExport:
             time=session.time.isoformat() if session.time else "",
             focus_time_seconds=session.focus_time_seconds,
             category=session.category,
+            tz=session.tz,
         )
         for session in sessions
     ]
 
-    # Get current time in Eastern Time for export timestamp
-    export_time = timezone_utils.get_eastern_now()
+    # Export timestamp in the requester's local timezone
+    export_time = timezone_utils.now_local()
 
     return schemas.UserDataExport(
         version="1.0",
@@ -1640,6 +1611,7 @@ def import_user_data(
                 time=session_time,
                 focus_time_seconds=session_data.focus_time_seconds,
                 category=session_data.category,
+                tz=session_data.tz or user_context.get_current_tz().key,
             )
             db.add(new_session)
             sessions_imported += 1

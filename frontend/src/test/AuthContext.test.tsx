@@ -67,7 +67,7 @@ describe('AuthContext', () => {
   });
 
   it('should restore user from localStorage', () => {
-    const user: User = { email: 'storeduser@example.com', show_on_leaderboard: true };
+    const user: User = { email: 'storeduser@example.com', show_on_leaderboard: true, timezone: 'America/New_York' };
     localStorage.setItem('user', JSON.stringify(user));
 
     render(

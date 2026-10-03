@@ -15,6 +15,9 @@ class UserInformation(Base):
     password = Column(String(255), nullable=False)
     display_name = Column(String(255), nullable=True)
     show_on_leaderboard = Column(Boolean, nullable=False, default=True)
+    timezone = Column(
+        String(64), nullable=False, server_default="America/New_York"
+    )
 
     # Relationships
     focus_sessions = relationship(
@@ -42,6 +45,12 @@ class FocusInformation(Base):
     time = Column(DateTime, primary_key=True, nullable=False)
     focus_time_seconds = Column(Integer, nullable=False)
     category = Column(String(255), nullable=False)
+    # The IANA tz the user was in when this row was logged. Bucketing into
+    # local days/weeks uses this — not the user's *current* tz — so history
+    # stays pinned to the calendar the user actually lived in.
+    tz = Column(
+        String(64), nullable=False, server_default="America/New_York"
+    )
 
     # Relationship to user
     user = relationship("UserInformation", back_populates="focus_sessions")

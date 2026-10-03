@@ -32,7 +32,11 @@
       "Bash(docker exec:*)",
       "Bash(python -m py_compile:*)",
       "Bash(python test_timezone_splitting.py:*)",
-      "Bash(docker ps:*)"
+      "Bash(docker ps:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(lsof -ti:3000)",
+      "Bash(xargs kill -9)"
     ]
   }
 }

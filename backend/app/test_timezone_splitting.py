@@ -98,6 +98,12 @@ def test_midnight_split():
             print("✅ SUCCESS! Session was split into 2 sessions")
             print()
 
+            # Both split rows must carry the tz the user was in at write time.
+            assert all(s.tz == EASTERN.key for s in sessions), (
+                f"Expected both rows to be tagged {EASTERN.key}; got "
+                f"{[s.tz for s in sessions]}"
+            )
+
             total_duration = 0
             for i, session in enumerate(sessions, 1):
                 # Database stores as naive UTC, so treat it as UTC first, then convert to Eastern
@@ -106,7 +112,7 @@ def test_midnight_split():
                     session_time_utc = session.time.replace(tzinfo=ZoneInfo("UTC"))
                     session_time_eastern = session_time_utc.astimezone(EASTERN)
                 else:
-                    session_time_eastern = timezone_utils.utc_to_eastern(session.time)
+                    session_time_eastern = timezone_utils.utc_to_local(session.time, EASTERN)
 
                 session_start = session_time_eastern - timedelta(seconds=session.focus_time_seconds)
 
@@ -131,12 +137,12 @@ def test_midnight_split():
             if sessions[0].time.tzinfo is None:
                 session1_end = sessions[0].time.replace(tzinfo=ZoneInfo("UTC")).astimezone(EASTERN)
             else:
-                session1_end = timezone_utils.utc_to_eastern(sessions[0].time)
+                session1_end = timezone_utils.utc_to_local(sessions[0].time, EASTERN)
 
             if sessions[1].time.tzinfo is None:
                 session2_end = sessions[1].time.replace(tzinfo=ZoneInfo("UTC")).astimezone(EASTERN)
             else:
-                session2_end = timezone_utils.utc_to_eastern(sessions[1].time)
+                session2_end = timezone_utils.utc_to_local(sessions[1].time, EASTERN)
 
             # Session 1 should end at midnight
             midnight = session1_end.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -174,7 +180,7 @@ def test_midnight_split():
             if session.time.tzinfo is None:
                 session_time_eastern = session.time.replace(tzinfo=ZoneInfo("UTC")).astimezone(EASTERN)
             else:
-                session_time_eastern = timezone_utils.utc_to_eastern(session.time)
+                session_time_eastern = timezone_utils.utc_to_local(session.time, EASTERN)
             print(f"\n   Single session:")
             print(f"      End time: {session_time_eastern.strftime('%Y-%m-%d %I:%M:%S %p %Z')}")
             print(f"      Duration: {session.focus_time_seconds} seconds")
@@ -253,7 +259,7 @@ def test_no_split():
             if session.time.tzinfo is None:
                 session_time_eastern = session.time.replace(tzinfo=ZoneInfo("UTC")).astimezone(EASTERN)
             else:
-                session_time_eastern = timezone_utils.utc_to_eastern(session.time)
+                session_time_eastern = timezone_utils.utc_to_local(session.time, EASTERN)
             print(f"   Duration: {session.focus_time_seconds} seconds")
             print(f"   End time: {session_time_eastern.strftime('%Y-%m-%d %I:%M:%S %p %Z')}")
         else:
@@ -302,7 +308,7 @@ def test_evening_session():
         print(f"   End:   {test_date.strftime('%Y-%m-%d %I:%M:%S %p %Z')}")
 
         # Convert to UTC to show what should be stored in database
-        test_date_utc = timezone_utils.eastern_to_utc(test_date).replace(tzinfo=None)
+        test_date_utc = timezone_utils.local_to_utc(test_date, EASTERN).replace(tzinfo=None)
         print(f"\n🌍 Expected UTC storage:")
         print(f"   Database should store: {test_date_utc.strftime('%Y-%m-%d %H:%M:%S UTC')}")
         print(f"   (Note: UTC is {(test_date_utc.hour - test_date.hour) % 24} hours ahead)")
@@ -343,7 +349,7 @@ def test_evening_session():
                 session_time_utc = session.time.replace(tzinfo=ZoneInfo("UTC"))
                 session_time_eastern = session_time_utc.astimezone(EASTERN)
             else:
-                session_time_eastern = timezone_utils.utc_to_eastern(session.time)
+                session_time_eastern = timezone_utils.utc_to_local(session.time, EASTERN)
 
             print(f"\n   When converted back to Eastern:")
             print(f"   End time: {session_time_eastern.strftime('%Y-%m-%d %I:%M:%S %p %Z')}")
