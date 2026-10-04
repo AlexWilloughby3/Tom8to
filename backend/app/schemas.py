@@ -239,7 +239,10 @@ class ExportedCategory(BaseModel):
 
 class ExportedGoal(BaseModel):
     category: str
-    goal_time_per_week_seconds: int
+    # Exports from before goal types existed omit this; they were all time-based
+    goal_type: GoalType = GoalType.TIME_BASED
+    goal_time_per_week_seconds: Optional[int] = None
+    description: Optional[str] = None
 
 
 class ExportedSession(BaseModel):

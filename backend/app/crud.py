@@ -1498,7 +1498,9 @@ def export_user_data(db: Session, email: str) -> schemas.UserDataExport:
     exported_goals = [
         schemas.ExportedGoal(
             category=goal.category,
+            goal_type=goal.goal_type,
             goal_time_per_week_seconds=goal.goal_time_per_week_seconds,
+            description=goal.description,
         )
         for goal in goals
     ]
@@ -1561,12 +1563,15 @@ def import_user_data(
 
         # Import goals (replace existing goals)
         for goal_data in import_data.goals:
-            existing_goal = get_focus_goal(db, email, goal_data.category)
+            existing_goal = get_focus_goal(
+                db, email, goal_data.category, goal_data.goal_type
+            )
             if existing_goal:
                 # Update existing goal
                 existing_goal.goal_time_per_week_seconds = (
                     goal_data.goal_time_per_week_seconds
                 )
+                existing_goal.description = goal_data.description
                 goals_imported += 1
             else:
                 # Create new goal (only if category exists)
@@ -1575,7 +1580,9 @@ def import_user_data(
                     new_goal = models.FocusGoalInformation(
                         email=email,
                         category=goal_data.category,
+                        goal_type=goal_data.goal_type,
                         goal_time_per_week_seconds=goal_data.goal_time_per_week_seconds,
+                        description=goal_data.description,
                     )
                     db.add(new_goal)
                     goals_imported += 1

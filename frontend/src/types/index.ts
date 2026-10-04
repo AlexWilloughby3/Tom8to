@@ -172,7 +172,9 @@ export interface ExportedCategory {
 
 export interface ExportedGoal {
   category: string;
-  goal_time_per_week_seconds: number;
+  goal_type?: GoalType; // absent in older exports, which were all TIME_BASED
+  goal_time_per_week_seconds?: number;
+  description?: string;
 }
 
 export interface ExportedSession {
